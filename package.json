@@ -1,0 +1,31 @@
+{
+  "name": "reviewpulse",
+  "private": true,
+  "version": "0.0.0",
+  "description": "ReviewPulse M1 — GitLab KPI visibility (read-only)",
+  "packageManager": "npm@11.13.0",
+  "engines": {
+    "node": "24.x",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "dev:web": "npm run dev -w @reviewpulse/web",
+    "dev:worker": "npm run start -w @reviewpulse/worker",
+    "db:generate": "npm run generate -w @reviewpulse/db",
+    "db:migrate": "npm run migrate:dev -w @reviewpulse/db",
+    "db:migrate:deploy": "npm run migrate:deploy -w @reviewpulse/db",
+    "db:validate": "npm run validate -w @reviewpulse/db",
+    "db:format": "npm run format -w @reviewpulse/db",
+    "db:migrate:status": "npm run migrate:status -w @reviewpulse/db",
+    "db:ready-smoke": "npm run ready-smoke -w @reviewpulse/db",
+    "wp0:check": "npm run db:generate && npm run lint && npm run typecheck && npm run test"
+  }
+}
