@@ -1,11 +1,11 @@
 # WP1 Execution Plan — Crypto + GitLab credentials
 
-Status: **APPROVED — implemented, awaiting CI verification** — 2026-08-05  
+Status: **PASS** — 2026-08-05 (merged to main; CI green)  
 Parent: `docs/PLAN-M1-Implementation.md` (APPROVED)  
 Prerequisite: **WP0 = PASS**  
-Branch: `feat/m1-wp1-crypto-credentials`
+Branch: `feat/m1-wp1-crypto-credentials` (merged)
 
-Locks below were implemented as written. Migration applied via `20260805120000_wp1_credential_envelope`. Scope unchanged: no WP2+, AppAuth/UI, GitLab HTTP, OAuth/SSO/Redis/webhook/AI/NVIDIA/mutations; TB-WP0 backlog untouched.
+Locks below were implemented as written. Migration applied via `20260805120000_wp1_credential_envelope`.
 
 ---
 

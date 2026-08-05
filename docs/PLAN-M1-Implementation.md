@@ -522,12 +522,13 @@ Forbidden: `score`, `grade`, `pass`, `fail`, `verdict`, `dat`, `khong_dat`, `pro
 
 ### WP1 — Crypto + GitLab credentials
 - AES-GCM + nonce + key_version; PatCredentialProvider; redaction; no PAT in logs
-- **Status: IMPLEMENTED — awaiting verification** — 2026-08-05 on branch `feat/m1-wp1-crypto-credentials`; locks in `docs/PLAN-M1-WP1-Execution.md` (envelope/AAD/key/persistence/transaction/redaction)
-- Local: crypto unit + redaction + migration-invariant tests, lint/typecheck/build, audit clean
-- **Open:** additive migration apply/status and the Postgres credential integration suite need CI (no Docker/Postgres locally) — no WP1 PASS until that job is green
+- **Status: PASS** — 2026-08-05 (merged to main; CI green: AES-GCM unit/security + Postgres migrate + credential integration + concurrent replace/rollback + lint/typecheck/test/build/audit; review P0=0, no blocking P1 for WP1 scope)
+- Locks: `docs/PLAN-M1-WP1-Execution.md`
 
 ### WP2 — GitLab read client + SSRF
 - SSRF resolver + redirect policy; commits `since`/`until`; MR `updated_after`; pagination/retry
+- **Status: APPROVED (fast-track 2026-08-05)** — locks in `docs/PLAN-M1-WP2-Execution.md`; A1–A8 approved with A1/A8/pagination tightened
+- Branch: `feat/m1-wp2-gitlab-read-client`
 
 ### WP3 — AppAuth + sessions + CSRF
 - Admin invite/create user; Argon2id login; server-side sessions; rotate; revoke-all; deactivate; CSRF; lockout; audit
@@ -666,5 +667,6 @@ Verified present in this plan: AppAuth split; PAT lifecycle 401≠403/404; commi
 - **Effort:** M1 ~9–11d after AppAuth split
 - **Outside voice:** not re-run this revision
 - **WP0:** **PASS** (2026-08-05) — merged to main; CI migrate + ready-smoke green; review 0 P0 / 0 P1 / 5 P2 backlog
-- **WP1:** implemented on `feat/m1-wp1-crypto-credentials` per `docs/PLAN-M1-WP1-Execution.md`; AES-256-GCM envelope + AAD, PatCredentialProvider, redaction, additive migration
-- **Next:** CI must confirm migrate apply/status and the Postgres credential integration suite before WP1 = PASS; WP2 stays not started
+- **WP1:** **PASS** (2026-08-05) — merged to main; AES-GCM + credential provider + Postgres integration CI green; review ready-to-merge for WP1 scope
+- **WP2:** execution plan **APPROVED** in `docs/PLAN-M1-WP2-Execution.md` (fast-track 2026-08-05) — implementing on `feat/m1-wp2-gitlab-read-client`
+- **Next:** WP2 verification → do not start WP3 until WP2 = PASS
