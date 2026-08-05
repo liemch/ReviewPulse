@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    name: WP0 verify (Postgres + quality gates)
+    name: M1 verify (Postgres + quality gates)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -30,8 +30,10 @@ jobs:
     env:
       # GitHub Actions maps service ports to localhost on the job container.
       DATABASE_URL: postgresql://reviewpulse:reviewpulse@localhost:5432/reviewpulse?schema=public
-      # CI-only placeholders — not production secrets; crypto/session unused in WP0.
+      # CI-only placeholders — not production secrets. Credential integration
+      # tests inject their own generated key, so this only exercises the loader.
       TOKEN_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      TOKEN_ENCRYPTION_KEY_VERSION: v1
       SESSION_SECRET: ci-only-session-secret-min-32-chars-xx
       GITLAB_URL_ALLOWLIST: https://gitlab.example.com
       NODE_ENV: test

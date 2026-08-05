@@ -1,11 +1,11 @@
 # WP1 Execution Plan — Crypto + GitLab credentials
 
-Status: **LOCKED (pending implement approval)** — 2026-08-05  
+Status: **APPROVED — implemented, awaiting CI verification** — 2026-08-05  
 Parent: `docs/PLAN-M1-Implementation.md` (APPROVED)  
 Prerequisite: **WP0 = PASS**  
-Branch (when approved): `feat/m1-wp1-crypto-credentials` from latest `main`
+Branch: `feat/m1-wp1-crypto-credentials`
 
-Do **not** implement until explicit WP1 go-ahead. No WP2+, AppAuth/UI, GitLab HTTP, OAuth/SSO/Redis/webhook/AI/NVIDIA/mutations. Do not clear TB-WP0 backlog in this WP.
+Locks below were implemented as written. Migration applied via `20260805120000_wp1_credential_envelope`. Scope unchanged: no WP2+, AppAuth/UI, GitLab HTTP, OAuth/SSO/Redis/webhook/AI/NVIDIA/mutations; TB-WP0 backlog untouched.
 
 ---
 
@@ -72,7 +72,7 @@ reviewpulse:gitlab-pat|v1|kv1|connection:clx...|credential:cly...
 
 | Env | Format | Notes |
 |---|---|---|
-| `TOKEN_ENCRYPTION_KEY` | standard **base64** of exactly **32** random bytes | Reject raw arbitrary-length text; reject wrong decoded length |
+| `TOKEN_ENCRYPTION_KEY` | **canonical** standard base64 of exactly **32** random bytes | Strict decode: no trimming or normalization; reject non-alphabet characters, malformed padding, any whitespace (including a trailing newline), wrong decoded length, and any input that does not survive a decode/encode round trip unchanged |
 | `TOKEN_ENCRYPTION_KEY_VERSION` | string label e.g. `v1` | Maps to integer `key_version` stored on rows (`v1` → `1`) |
 
 **M1/WP1 single-key policy (documented limit):**
@@ -108,9 +108,9 @@ reviewpulse:gitlab-pat|v1|kv1|connection:clx...|credential:cly...
 
 **No plaintext PAT column** (good — keep it that way).
 
-### Required additive, non-destructive migration (WP1 implement phase only)
+### Shipped additive, non-destructive migration
 
-Propose migration `YYYYMMDDHHMMSS_wp1_credential_envelope` (name final at implement):
+`packages/db/prisma/migrations/20260805120000_wp1_credential_envelope/migration.sql`:
 
 ```prisma
 // additive fields on UserCredential
@@ -172,7 +172,12 @@ interface PatCredentialProvider {
 - No long-lived plaintext cache (decrypt per call or short ephemeral in-call only).
 - Never attach PAT to thrown errors.
 
-Empty / whitespace-only PAT → typed validation error before seal.
+**PAT input policy — validate, never normalize** (`assertValidPat`). Rejected with typed `INVALID_PAT` before any transaction opens, for both `storeCredential` and `replaceCredential`:
+- non-string, empty, or whitespace-only;
+- `pat !== pat.trim()` (leading/trailing whitespace is a copy-paste accident, not a token);
+- any C0 control character or DEL anywhere, covering tab, newline, and carriage return.
+
+The sealed plaintext is byte-for-byte the validated string, and `pat_hint_last4` is the last four characters of that same string — no separate trim, so the hint always describes exactly what was sealed. The error message is a constant; the input and the rejected portion never appear in errors or logs.
 
 Align package exports with this contract (may extend WP0 stub `GitLabCredentialProvider` or wrap it — prefer explicit methods above as the WP1 surface; keep interface name stable where possible).
 

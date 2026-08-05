@@ -47,6 +47,14 @@ enum CredentialStatus {
   revoked
 }
 
+enum CredentialInvalidationReason {
+  gitlab_unauthorized
+  expired
+  user_revoked
+  user_deleted
+  connection_deleted
+}
+
 enum SyncJobStatus {
   pending
   running
@@ -139,16 +147,19 @@ model GitLabConnection {
 }
 
 model UserCredential {
-  id           String           @id @default(cuid())
-  connectionId String           @map("connection_id")
-  ciphertext   Bytes
-  keyVersion   Int              @map("key_version")
-  nonce        Bytes
-  patHintLast4 String           @map("pat_hint_last4")
-  status       CredentialStatus @default(active)
-  validatedAt  DateTime?        @map("validated_at")
-  revokedAt    DateTime?        @map("revoked_at")
-  createdAt    DateTime         @default(now()) @map("created_at")
+  id                 String                        @id @default(cuid())
+  connectionId       String                        @map("connection_id")
+  ciphertext         Bytes
+  authTag            Bytes                         @map("auth_tag")
+  envelopeVersion    Int                           @default(1) @map("envelope_version")
+  keyVersion         Int                           @map("key_version")
+  nonce              Bytes
+  patHintLast4       String                        @map("pat_hint_last4")
+  status             CredentialStatus              @default(active)
+  invalidationReason CredentialInvalidationReason? @map("invalidation_reason")
+  validatedAt        DateTime?                     @map("validated_at")
+  revokedAt          DateTime?                     @map("revoked_at")
+  createdAt          DateTime                      @default(now()) @map("created_at")
 
   connection GitLabConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
