@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { randomBytes, randomUUID } from "node:crypto";
-import { after, before, describe, it } from "node:test";
+import { after, afterEach, before, describe, it } from "node:test";
 
 import {
   AesGcmSecretSealer,
@@ -64,22 +64,49 @@ describe("PrismaPatCredentialProvider (PostgreSQL)", { skip }, () => {
     sealer,
   });
 
-  const suiteId = randomUUID();
+  const suiteId = randomUUID().replace(/-/g, "");
   const instanceId = `inst_${suiteId}`;
-  const userId = `user_${suiteId}`;
-  const createdConnectionIds: string[] = [];
 
+  /**
+   * Users created by the test currently running. Deleting a user cascades to
+   * its connections and their credentials, so the root id is the whole cleanup.
+   */
+  const fixtureUserIds = new Set<string>();
+  const cleanupFailures: string[] = [];
+
+  /**
+   * Every connection gets its own ReviewPulse user and its own GitLab identity.
+   *
+   * Sharing one user across connections violates
+   * `gitlab_connections_one_active_per_user_instance`, and sharing one GitLab
+   * user id violates `gitlab_connections_one_live_identity`. Reusing the
+   * instance is fine because both sides of each index still differ.
+   */
   async function createConnection(): Promise<string> {
+    const fixtureId = randomUUID().replace(/-/g, "");
+    const userId = `user_${suiteId}_${fixtureId}`;
+    const address = `${userId}@integration.test`;
+
+    await prisma.user.create({
+      data: {
+        id: userId,
+        email: address,
+        normalizedEmail: address,
+        passwordHashArgon2id: "not-a-real-hash",
+        role: "developer",
+      },
+    });
+    fixtureUserIds.add(userId);
+
     const connection = await prisma.gitLabConnection.create({
       data: {
         userId,
         gitlabInstanceId: instanceId,
-        gitlabUserId: `gl_${randomUUID()}`,
-        gitlabUsername: "integration-user",
+        gitlabUserId: `gl_${fixtureId}`,
+        gitlabUsername: `integration-${fixtureId.slice(0, 8)}`,
         status: "active",
       },
     });
-    createdConnectionIds.push(connection.id);
     return connection.id;
   }
 
@@ -96,27 +123,42 @@ describe("PrismaPatCredentialProvider (PostgreSQL)", { skip }, () => {
         baseUrlNormalized: `https://gitlab-${suiteId}.example.com`,
       },
     });
-    await prisma.user.create({
-      data: {
-        id: userId,
-        email: `${suiteId}@example.com`,
-        normalizedEmail: `${suiteId}@example.com`,
-        passwordHashArgon2id: "not-a-real-hash",
-        role: "developer",
-      },
-    });
+  });
+
+  /**
+   * Scoped to the ids this test created, so a suite running in parallel is
+   * untouched. A cleanup error is collected rather than thrown: throwing here
+   * would replace the real assertion failure with a teardown error. The
+   * collected list is asserted once at the end instead.
+   */
+  afterEach(async () => {
+    const userIds = [...fixtureUserIds];
+    fixtureUserIds.clear();
+
+    for (const userId of userIds) {
+      try {
+        await prisma.user.delete({ where: { id: userId } });
+      } catch {
+        cleanupFailures.push(userId);
+      }
+    }
   });
 
   after(async () => {
-    await prisma.userCredential.deleteMany({
-      where: { connectionId: { in: createdConnectionIds } },
-    });
-    await prisma.gitLabConnection.deleteMany({ where: { userId } });
-    await prisma.user.deleteMany({ where: { id: userId } });
-    await prisma.gitLabInstanceAllowlist.deleteMany({
-      where: { id: instanceId },
-    });
+    try {
+      await prisma.gitLabInstanceAllowlist.deleteMany({
+        where: { id: instanceId },
+      });
+    } catch {
+      cleanupFailures.push(instanceId);
+    }
     await prisma.$disconnect();
+
+    assert.deepEqual(
+      cleanupFailures,
+      [],
+      "fixture cleanup left rows behind for these ids",
+    );
   });
 
   it("stores a sealed credential with no plaintext PAT in any column", async () => {
@@ -168,6 +210,9 @@ describe("PrismaPatCredentialProvider (PostgreSQL)", { skip }, () => {
   });
 
   it("rejects an unknown connection with a typed error", async () => {
+    // The foreign key violation is the assertion; Prisma logs one expected
+    // `prisma:error` line for it. The log carries the constraint name only —
+    // no PAT and no ciphertext — and the provider still maps it to a safe code.
     await assert.rejects(
       () => provider.storeCredential(`missing_${randomUUID()}`, PAT_ONE),
       { code: "CONNECTION_NOT_FOUND" },
