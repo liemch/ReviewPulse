@@ -518,9 +518,12 @@ Forbidden: `score`, `grade`, `pass`, `fail`, `verdict`, `dat`, `khong_dat`, `pro
 - Workspace apps/web, apps/worker, packages/*
 - Branch **main**; Docker Compose Postgres; Prisma; env templates
 - CI: lint, typecheck, test
+- **Status: PASS** — 2026-08-05 (merged to main; CI green: migrate + ready-smoke + lint/typecheck/test/build; review P0=0 P1=0)
 
 ### WP1 — Crypto + GitLab credentials
 - AES-GCM + nonce + key_version; PatCredentialProvider; redaction; no PAT in logs
+- **Status: LOCKED (pending implement approval)** — see `docs/PLAN-M1-WP1-Execution.md` for envelope/AAD/key/persistence/transaction/redaction locks
+- **Not started** — no code until explicit WP1 go-ahead; branch `feat/m1-wp1-crypto-credentials` from latest `main`
 
 ### WP2 — GitLab read client + SSRF
 - SSRF resolver + redirect policy; commits `since`/`until`; MR `updated_after`; pagination/retry
@@ -661,4 +664,6 @@ Verified present in this plan: AppAuth split; PAT lifecycle 401≠403/404; commi
 - **Auth revised:** AppAuth (email/password) separate from GitLab PAT connection; SSO/OAuth = future
 - **Effort:** M1 ~9–11d after AppAuth split
 - **Outside voice:** not re-run this revision
-- **Next:** Await explicit go-ahead to **implement WP0** only (no code until then)
+- **WP0:** **PASS** (2026-08-05) — merged to main; CI migrate + ready-smoke green; review 0 P0 / 0 P1 / 5 P2 backlog
+- **WP1:** execution locks in `docs/PLAN-M1-WP1-Execution.md` — **await explicit implement approval** (no code until then)
+- **Next:** Approve WP1 implement → branch `feat/m1-wp1-crypto-credentials` from latest `main`
