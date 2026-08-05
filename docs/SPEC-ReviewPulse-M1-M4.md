@@ -18,6 +18,7 @@ gstack_spec:
 **Type:** Epic (executable specification)  
 **Status:** ARCHIVED (file-only) — 2026-08-05T05:54:59Z  
 **Repo:** ReviewPulse (greenfield; only `CLAUDE.md` present as of 2026-08-05)  
+**Working branch:** `main`  
 **Demand:** **UNVERIFIED** (office-hours Q1=C). Do not treat interest as validated pull.  
 **Personas:** DEV-01, TL-01 (anonymous; no real names in this spec)  
 **Source design:** `~/.gstack/projects/ReviewPulse/hoang-liem-master-design-20260805-124012.md`  
@@ -50,6 +51,93 @@ Today, DEV-01 and TL-01 rely on GitLab UI + manual copy into reports to check wh
 3. Offer AI draft review of diffs before a human decides merge — never autonomous merge/approve/comment.
 
 **Non-goals (product):** Automatic KPI scoring or KPI pass/fail conclusions from commit/MR counts.
+
+
+## Company KPI reference rules (DEV role) — display only
+
+**Principle:** ReviewPulse shows **observed GitLab facts** plus **configurable reference ranges**. It does **not** become an automated KPI scoring system. Final KPI judgment stays with the company process.
+
+**Disclaimer (UI, always visible near metrics):**
+> ReviewPulse cung cấp dữ liệu hỗ trợ đối soát. Quyết định KPI cuối cùng thuộc quy trình đánh giá của công ty.
+
+### Reference policy snapshot (company DEV rules — informational)
+
+| Topic | Company reference (policy note) | Product handling |
+|-------|----------------------------------|------------------|
+| Who applies | All GitLab users who can access ReviewPulse-allowed projects | **No Claude Members list** — never build, sync, or filter on Claude membership |
+| AI-assisted | Tag `[AI]` in commit subject (self-declared) | Count as **AI-assisted commits** (`self_reported`); do **not** call this “prompts”; do not convert commits→prompts |
+| Company note “10–30 prompts/week” | Policy origin only | Store as policy note / `not_configured` conversion — **never** compare directly to AI-assisted commit counts unless company confirms a conversion formula |
+| Lines of Code | ≥ 500 LOC/week; exclude invalid generated code | Show reference; formula may be `unknown`/`not_configured` until locked |
+| Commit Frequency | 3–8 commits/week | Show count + reference; **no** pass/fail |
+| MR Size | ≤ 400 lines/MR (GitLab **Merge Request**, not PR) | Show reference when stats available; else defer / `not_configured` |
+
+### Absolute prohibitions (API + UI)
+
+Must **never** return or render:
+- KPI score, grade, pass/fail, đạt/không đạt, verdict
+- Inferred prompt counts from commits
+- Auto-conclusion “used AI” / “did not use AI” beyond subject tag presence
+
+### Eligibility (no Claude Members)
+
+**App access:** User must have an admin-created/invited ReviewPulse account and a valid app session (email + password). GitLab PAT is **not** the login credential.
+
+**GitLab data access** additionally requires:
+1. Valid ReviewPulse session and active (not deactivated) user  
+2. Project on ReviewPulse allowlist  
+3. User enabled the project  
+4. Viewer’s own PAT can still read the project  
+
+Email is only for author linking, filtering, and warnings. User-entered aliases are `unverified` and are not confirmed identity. GitLab identity key is `instance_id + gitlab_user_id`, not email.
+
+### FR-K — Reference metrics (versioned rules)
+
+| ID | Requirement | Milestone |
+|----|-------------|-----------|
+| FR-K1 | Rules stored as configurable, **versioned** policy records — not hard-coded in domain logic | M1 (schema + commit-frequency + AI-tag detection) |
+| FR-K2 | Each metric response includes: `metric`, `value` \| null, `unit`, `reference_range`, `source`, `calculated_at`, `verification_status`, `rule_version`, optional `detection_rule`, optional `status` (`ok`\|`unknown`\|`not_configured`) | M1 |
+| FR-K3 | Missing data or unlocked formula → `unknown` / `not_configured` — **never** coerce to fail/pass | M1 |
+| FR-K4 | AI-assisted: case-insensitive subject token `[AI]` / `[ai]` with brackets only; subject only; once per instance+project+SHA; `verification_status=self_reported`; label “AI-assisted commits” / “Commit khai báo có AI hỗ trợ” | M1 |
+| FR-K5 | Commit frequency: weekly count + reference `3–8` — no verdict | M1 |
+| FR-K6 | LOC ≥500 reference: implement **only** if GitLab stats are reliable without full-repo analysis; else `not_configured` / document for later | M1 display stub or M2 if stats insufficient |
+| FR-K7 | MR size ≤400: use GitLab MR terminology; if diff stats expand scope beyond approved M1, **document only for M2** — no M1 implementation of heavy diff analysis | M2 (unless trivial stats already on MR payload and formula locked) |
+| FR-K8 | No Claude Members table/sync/filter | M1+ |
+| FR-K9 | No Claude/prompt-tool integrations for AI metrics in M1 | M1 |
+
+### Metric JSON example (AI-assisted)
+
+```json
+{
+  "metric": "ai_assisted_commits",
+  "value": 2,
+  "unit": "commits_per_week",
+  "reference_range": null,
+  "reference_policy_note": "Company origin note: 10-30 prompts/week — not comparable without conversion formula",
+  "source": "gitlab_commit_subject",
+  "detection_rule": "subject_contains_[AI]",
+  "verification_status": "self_reported",
+  "calculated_at": "2026-08-05T00:00:00Z",
+  "rule_version": "dev-kpi-ref-2026.08.1",
+  "status": "ok"
+}
+```
+
+### UI examples
+
+`Commit tuần này: 5 | Mức tham chiếu: 3–8 | Nguồn: GitLab`
+
+`Commit khai báo có AI hỗ trợ: 2 | Nhận diện qua tag [AI] | Trạng thái: Self-reported`
+
+### Human decisions still required (do not invent in code)
+
+**Commit frequency:** timezone & week boundary; default vs all refs (plan currently locks all non-archived branches for sync — confirm for *counting*); unmerged commits; merge/bot/revert commits; which author emails count.
+
+**LOC:** additions vs additions+deletions; generated/vendor/minified/lockfile exclusion; merge/revert/duplicate; code vs test vs docs vs config weighting.
+
+**MR size:** additions vs +/-; measure at create / latest / merge; excluded file patterns; advisory vs mandatory policy.
+
+Until locked → `not_configured` / `unknown`.
+
 
 ---
 
@@ -105,7 +193,7 @@ Today, DEV-01 and TL-01 rely on GitLab UI + manual copy into reports to check wh
 | Topic | Proposed default | Rationale |
 |-------|------------------|-----------|
 | Stack | TypeScript monorepo: Next.js (App Router) UI + NestJS or Next route handlers API; PostgreSQL; Redis/BullMQ workers | Fast internal prototype; strong typing; good GitLab API ecosystem |
-| AuthN | App session (OIDC/SSO or local) + **per-user GitLab OAuth** for API mutations; optional instance PAT encrypted for read-sync bootstrap | Matches “user’s GitLab permissions” |
+| AuthN | **M1:** local AppAuth (invite-only email/password, Argon2id) + separate per-user GitLab PAT (`read_api`) for read sync. **Future:** SSO/OIDC via AppAuthProvider; GitLab OAuth for mutations (M2) | Splits app login from GitLab credential |
 | GitLab | Self-managed **or** gitlab.com via configurable base URL (SSRF allowlist) | Internal companies often self-host |
 | AI | Provider interface: `CloudLLMProvider` + `InternalHTTPProvider`; default off per project | M3 blocked until sign-off |
 | Hosting | Internal VPC / company K8s or VM behind SSO | Prototype |
@@ -141,13 +229,35 @@ Today, DEV-01 and TL-01 rely on GitLab UI + manual copy into reports to check wh
 
 ## Functional requirements
 
+
+### FR-APP — ReviewPulse application auth (M1)
+
+| ID | Requirement |
+|----|-------------|
+| FR-APP1 | No public signup; admin create/invite only; roles `admin`, `tech_lead`, `developer`. |
+| FR-APP2 | Login with email + password; email unique after normalize; Argon2id password hashes. |
+| FR-APP3 | Server-side sessions in Postgres; opaque cookie; hash token at rest; rotate on login; idle 2h + absolute 12h (configurable). |
+| FR-APP4 | Logout / deactivate / revoke-all sessions; CSRF/Origin on state-changing routes; login rate-limit + lockout. |
+| FR-APP5 | `AppAuthProvider` abstraction for future SSO/OIDC. PAT must not authenticate app login. |
+| FR-APP6 | Admin password reset in M1; self-serve email reset deferred without safe mail provider. |
+
+### FR-GLCONN — GitLab connection (M1)
+
+| ID | Requirement |
+|----|-------------|
+| FR-GLCONN1 | After app login, user configures GitLab URL (allowlist) + personal PAT in Settings. |
+| FR-GLCONN2 | Validate via `GET /api/v4/user`; identity = instance_id + gitlab_user_id; one identity ↔ one RP user (admin audited conflicts). |
+| FR-GLCONN3 | One active credential per user per instance; `read_api` only; AES-256-GCM + nonce + key_version; never return PAT/ciphertext to client; **admin cannot view plaintext PAT**. |
+| FR-GLCONN4 | test / replace / delete connection; 401 vs 403/404 lifecycle; app session survives PAT failure. |
+| FR-GLCONN5 | No shared/admin PAT; no cross-user credential use; `GitLabCredentialProvider` for future OAuth. |
+
 ### FR-G — GitLab integration (M1+)
 
 | ID | Requirement |
 |----|-------------|
 | FR-G1 | Connect one GitLab base URL + credentials; reject SSRF-prone URLs (metadata IPs, link-local, non-allowlisted hosts). |
 | FR-G2 | List groups/projects the credential can access; user selects sync set. |
-| FR-G3 | Sync commits and MRs with pagination, 429/5xx retry+backoff, and incremental cursors (`updated_after` / webhook catch-up). |
+| FR-G3 | Sync with pagination, 429/5xx retry+backoff. **MRs:** `updated_after` cursors. **Commits:** `since`/`until` + lookback/overlap; upsert by instance+project+SHA; M1 refs = all non-archived branches. Advance cursors only after full successful window. |
 | FR-G4 | On conflict with local cache, GitLab API wins; mark local row `stale` until refresh. |
 | FR-G5 | Verify webhook secrets; ignore unsigned/invalid. |
 
@@ -159,7 +269,10 @@ Today, DEV-01 and TL-01 rely on GitLab UI + manual copy into reports to check wh
 | FR-D2 | Show commits, MRs created, MRs merged, MRs open/waiting. |
 | FR-D3 | Each row links to GitLab web URL. |
 | FR-D4 | Warn when commit author email ≠ user-configured emails (alias list). |
-| FR-D5 | **Must not** compute KPI scores, grades, or pass/fail labels. |
+| FR-D5 | **Must not** compute KPI scores, grades, pass/fail, đạt/không đạt, or inferred prompt counts. |
+| FR-D6 | May show **reference metrics** (counts + reference ranges + source + verification_status + rule_version) per FR-K. |
+| FR-D7 | Terminology: always **Merge Request (MR)** in UI — never “Pull Request/PR” for GitLab entities. |
+| FR-D8 | No Claude Members dependency for access or filtering. |
 
 ### FR-M — MR workspace (M2)
 
@@ -291,11 +404,28 @@ AiQualityMetric(run_id, latency_ms, token_in, token_out, cost_estimate, fp_count
 | View dashboard project | User can `read_api` that project on GitLab (mirrored). |
 | View MR/diff | Same + MR visible to user on GitLab. |
 | Comment / approve / merge | Must use **user OAuth token**; GitLab enforces permissions; App prechecks then live revalidate. |
-| Configure connection | Admin/champion role in App. |
+| Configure own GitLab connection | Any active user (own PAT only). |
+| Invite/deactivate users | `admin` role. |
+| Configure instance/project allowlists | `admin` role. |
+| Admin view project data | **Not** automatic — requires admin’s own GitLab credential + GitLab rights. |
 | Enable AI / post findings | Project maintainer-equivalent in App ACL **and** GitLab permission to note on MR. |
 | Read audit | Admin or project maintainer role. |
 
-App must not grant powers GitLab denies. Cache ACL is optimization; mutations always hit GitLab.
+App must not grant powers GitLab denies. Shared project cache is not authorization. Mutations (M2+) always hit GitLab with user credential.
+
+### M1 read authorization (locked)
+
+Every project data read requires **all** of:
+1. Valid ReviewPulse AppAuth session; user not deactivated  
+2. Project on ReviewPulse allowlist  
+3. Per-user project enable  
+4. Viewer’s own PAT can read the project (live check or membership cache)
+
+- Shared Commit/MR cache is **never** an authorization source.
+- Membership cache TTL default **300 seconds**, configurable via env; on expiry / uncertain / GitLab error → **fail closed** (do not serve cache rows; never reuse stale `allowed=true`).
+- API queries are **authorization-first** (start from authorized project IDs); no load-all-then-filter-in-frontend.
+- GitLab 401 → credential invalid (app session remains). GitLab 403/404 on one project → membership deny for that pair only.
+- No shared/admin PAT fallback.
 
 ---
 
@@ -383,11 +513,13 @@ App must not grant powers GitLab denies. Cache ACL is optimization; mutations al
 1. User can save GitLab base URL + credential; invalid/SSRF URLs rejected with clear error.  
 2. User selects ≥1 accessible project; inaccessible projects cannot be added (GitLab 403 surfaced).  
 3. Worker syncs commits + MRs with pagination; simulated 429 recovers without losing cursor.  
-4. Incremental sync brings updates after `updated_after` / webhook without full rescan (verified by fixture).  
+4. Incremental sync: MRs via `updated_after`; commits via `since`/`until` + overlap (not `updated_after`); SHA upsert; fixture covers boundary timestamps, duplicate SHA, interrupted page + retry.  
 5. Dashboard filters by email + date range; shows commit/MR created/merged/open counts/lists.  
 6. Every entity shows working GitLab web link.  
 7. Commit whose author email ∉ configured emails shows mismatch warning.  
-8. UI and API contain **no** KPI score/grade/conclusion fields.  
+8. UI and API contain **no** KPI score/grade/pass/fail/verdict fields; reference metrics allowed per FR-K.
+8b. No Claude Members logic; AI-assisted metric is self_reported subject `[AI]` only; no prompt inference.
+8c. Commit frequency shows count + 3–8 reference without verdict; LOC/MR size `not_configured` unless formula+data locked.  
 9. Tokens not readable plaintext from DB dump test.  
 10. Unit/integration/security tests for M1 listed below pass in CI.
 
@@ -395,10 +527,10 @@ App must not grant powers GitLab denies. Cache ACL is optimization; mutations al
 
 | Layer | What | Count (min) |
 |-------|------|-------------|
-| Unit | Email mismatch; cursor upsert; SSRF URL classifier | +8 |
-| Integration | Sync pagination + 429 retry against GitLab mock | +5 |
-| Security | Token encryption round-trip; no token in logs | +3 |
-| E2E | Connect → sync fixture → dashboard filter | +2 |
+| Unit | Email normalize/verified; commit lookback/SHA upsert; `[AI]` matcher; SSRF classifier; Argon2id verify | ≥12 |
+| Integration | Sync pagination + 429; commit boundary/dup SHA/mid-page retry; 401 vs 403/404; IDOR project/connection/search/count; authz-first queries | ≥10 |
+| Security | PAT crypto nonce/tag/key_version; no secrets in logs/audit/response; CSRF; lockout; admin cannot read plaintext PAT | ≥6 |
+| E2E | AppAuth invite→login→GitLab connect→enable→sync→dashboard metrics (no verdict) | ≥3 |
 
 ---
 
@@ -555,7 +687,8 @@ Unknowns: GitLab version quirks, SSO integration, AI vendor procurement — may 
 ## Decisions requiring human approval
 
 1. **Stack finalization** (default TS/Next/Postgres/Redis above).  
-2. **Auth:** company SSO provider + GitLab OAuth app registration.  
+2. **Auth future:** company SSO/OIDC (AppAuthProvider) + GitLab OAuth app registration (M2). M1 is local AppAuth + PAT connection.  
+2b. **Session cookie SameSite** Lax vs Strict for deploy topology.  
 3. **GitLab base URL allowlist** / self-managed vs gitlab.com.  
 4. **M2 authorization & merge-safety review** sign-off owner.  
 5. **M3 AI vendor** (cloud vs internal), DPA, data residency, retention.  
@@ -563,7 +696,12 @@ Unknowns: GitLab version quirks, SSO integration, AI vendor procurement — may 
 7. **Audit retention** period and who can read audits.  
 8. **Whether M4 stale-AI policy is default on** for pilot projects.  
 9. **Pilot project/group** selection (not personal identities — team/path only).  
-10. **Remote git hosting** for this repo (currently local-only; `gh` unavailable).
+10. **Remote git hosting** for this repo (currently local-only; `gh` unavailable).  
+11. **Commit frequency counting rules:** timezone/week boundary; all-refs vs default for *metrics* (sync may still fetch all branches); include unmerged?; merge/bot/revert; author email set.  
+12. **LOC formula:** +/- vs additions; generated/vendor/lockfile exclusion; merge/revert/dupes; code vs test vs docs vs config.  
+13. **MR size formula:** +/- vs additions; create vs latest vs merge; excluded patterns; advisory vs mandatory.  
+14. **AI prompts conversion:** whether/how “10–30 prompts/week” maps to AI-assisted commits (default: **not comparable** until confirmed).  
+15. **LOC/MR-size M1 vs M2:** ship stub `not_configured` in M1 if GitLab stats insufficient without heavy analysis.
 
 ---
 
@@ -594,9 +732,12 @@ Unknowns: GitLab version quirks, SSO integration, AI vendor procurement — may 
 - M1 is the first implementation milestone.
 - M2 requires authorization + merge-safety review before mutation work.
 - M3–M4 remain **BLOCKED** until AI security/privacy sign-off.
-- GitLab **OAuth per-user** for comment/approve/merge; **no** high-privilege shared service account for mutations.
+- **M1 AppAuth:** invite-only email/password (Argon2id); GitLab PAT is separate Settings connection (`read_api`).
+- **Future:** SSO/OIDC (AppAuthProvider); GitLab OAuth per-user for comment/approve/merge (M2).
+- **No** high-privilege shared service account for mutations or sync.
 - GitLab is source of truth.
 - No automatic KPI scoring/conclusions.
+- KPI **reference display-only** (FR-K); no Claude Members; MR terminology; versioned rules.
 - AI never auto-comment, auto-approve, or auto-merge.
 - Stack default accepted: TypeScript / Next.js + PostgreSQL + Redis.
 - AI provider abstraction + per-project AI kill-switch accepted.
@@ -608,3 +749,16 @@ Unknowns: GitLab version quirks, SSO integration, AI vendor procurement — may 
 - Exact Nest vs Next-route-handlers: decide at C1.  
 - Webhooks in M1 optional; polling acceptable for pilot if network policy blocks hooks.  
 - GraphQL batching optional optimization after REST correctness.
+
+### AI provider candidate (M3+) — NVIDIA NIM
+
+Implementation note only — **does not change M1 scope, acceptance criteria, or effort.**
+
+- **NVIDIA NIM** is the preferred candidate AI provider for **M3**.
+- Integrate only through an `AIReviewProvider` (or equivalent) abstraction; domain logic must not depend directly on NVIDIA SDKs/APIs.
+- Support either NVIDIA-hosted API **or** self-hosted NIM via an OpenAI-compatible endpoint.
+- The NVIDIA API key is a **system credential** managed by admin / secret manager — not a per-developer key.
+- Never commit or log the API key.
+- **Do not** implement NVIDIA dependencies, API calls, or provider code in **M1**.
+- **M3–M4 remain BLOCKED** until AI security/privacy sign-off.
+- Before M3 starts, decide: hosted vs self-hosted, data residency, retention, and whether source diffs may leave the company network.
