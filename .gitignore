@@ -1,0 +1,33 @@
+node_modules/
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Secrets / local env (never commit)
+.env
+.env.*
+!.env.example
+!.env.example.*
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+.DS_Store
+docker-data/
+
+# Local / accidental DB artifacts
+*.db
+*.db-journal
+**/*.db
+**/*.db-journal
+packages/db/prisma/dev.db
+packages/db/prisma/*.db
+
+.turbo/
+.vercel/

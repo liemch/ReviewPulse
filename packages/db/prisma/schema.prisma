@@ -1,0 +1,361 @@
+// WP0 skeleton schema — columns aligned with PLAN-M1 data model.
+// Domain logic, crypto, AppAuth, and sync behavior land in later WPs.
+// Prisma 7: connection URL lives in prisma.config.ts (no Rust engine download).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  tech_lead
+  developer
+}
+
+enum UserStatus {
+  active
+  deactivated
+}
+
+enum EmailSource {
+  gitlab_primary
+  gitlab_secondary
+  user_alias
+}
+
+enum EmailVerificationStatus {
+  gitlab_verified
+  gitlab_unverified
+  user_unverified
+}
+
+enum ConnectionStatus {
+  active
+  invalid
+  superseded
+  deleted
+}
+
+enum CredentialStatus {
+  active
+  invalid
+  superseded
+  revoked
+}
+
+enum SyncJobStatus {
+  pending
+  running
+  completed
+  failed
+  sync_blocked
+}
+
+enum KpiRuleStatus {
+  active
+  inactive
+}
+
+model GitLabInstanceAllowlist {
+  id                String   @id @default(cuid())
+  baseUrlNormalized String   @unique @map("base_url_normalized")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  connections GitLabConnection[]
+  projects    ReviewPulseProjectAllowlist[]
+
+  @@map("gitlab_instance_allowlist")
+}
+
+model User {
+  id                   String     @id @default(cuid())
+  email                String
+  normalizedEmail      String     @unique @map("normalized_email")
+  passwordHashArgon2id String     @map("password_hash_argon2id")
+  role                 UserRole
+  status               UserStatus @default(active)
+  createdByAdminId     String?    @map("created_by_admin_id")
+  invitedAt            DateTime?  @map("invited_at")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  lastLoginAt          DateTime?  @map("last_login_at")
+
+  emails           UserEmail[]
+  sessions         Session[]
+  connections      GitLabConnection[]
+  projectEnables   UserProjectEnable[]
+  membershipCaches MembershipCache[]
+  auditEvents      AuditEvent[]        @relation("AuditActor")
+  metricSnapshots  MetricSnapshot[]
+
+  @@map("users")
+}
+
+model UserEmail {
+  id                 String                  @id @default(cuid())
+  userId             String                  @map("user_id")
+  email              String
+  normalizedEmail    String                  @map("normalized_email")
+  source             EmailSource
+  verificationStatus EmailVerificationStatus @map("verification_status")
+  isPrimary          Boolean                 @default(false) @map("is_primary")
+  createdAt          DateTime                @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, normalizedEmail])
+  @@index([normalizedEmail])
+  @@map("user_emails")
+}
+
+model GitLabConnection {
+  id               String           @id @default(cuid())
+  userId           String           @map("user_id")
+  gitlabInstanceId String           @map("gitlab_instance_id")
+  gitlabUserId     String           @map("gitlab_user_id")
+  gitlabUsername   String           @map("gitlab_username")
+  status           ConnectionStatus @default(active)
+  lastValidatedAt  DateTime?        @map("last_validated_at")
+  expiresHint      DateTime?        @map("expires_hint")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instance    GitLabInstanceAllowlist @relation(fields: [gitlabInstanceId], references: [id], onDelete: Restrict)
+  credentials UserCredential[]
+
+  // Partial unique indexes live in SQL migration (Prisma cannot express WHERE clauses):
+  // - gitlab_connections_one_active_per_user_instance:
+  //     UNIQUE (user_id, gitlab_instance_id) WHERE status = 'active'
+  // - gitlab_connections_one_live_identity:
+  //     UNIQUE (gitlab_instance_id, gitlab_user_id) WHERE status IN ('active', 'invalid')
+  // Historical superseded/deleted rows do not block a new active connection.
+  @@index([userId, gitlabInstanceId, status])
+  @@index([gitlabInstanceId, gitlabUserId, status])
+  @@map("gitlab_connections")
+}
+
+model UserCredential {
+  id           String           @id @default(cuid())
+  connectionId String           @map("connection_id")
+  ciphertext   Bytes
+  keyVersion   Int              @map("key_version")
+  nonce        Bytes
+  patHintLast4 String           @map("pat_hint_last4")
+  status       CredentialStatus @default(active)
+  validatedAt  DateTime?        @map("validated_at")
+  revokedAt    DateTime?        @map("revoked_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  connection GitLabConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  // Partial unique in SQL migration (Prisma cannot express WHERE):
+  // - user_credentials_one_active_per_connection:
+  //     UNIQUE (connection_id) WHERE status = 'active'
+  // superseded/revoked/invalid do not block a new active credential.
+  @@index([connectionId, status])
+  @@map("user_credentials")
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  tokenHash     String    @unique @map("token_hash")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  expiresAt     DateTime  @map("expires_at")
+  lastSeenAt    DateTime  @default(now()) @map("last_seen_at")
+  rotatedFrom   String?   @map("rotated_from")
+  revokedAt     DateTime? @map("revoked_at")
+  userAgentHash String?   @map("user_agent_hash")
+  ipHash        String?   @map("ip_hash")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("sessions")
+}
+
+model ReviewPulseProjectAllowlist {
+  id                String   @id @default(cuid())
+  gitlabInstanceId  String   @map("gitlab_instance_id")
+  gitlabProjectId   String   @map("gitlab_project_id")
+  pathWithNamespace String?  @map("path_with_namespace")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  instance GitLabInstanceAllowlist @relation(fields: [gitlabInstanceId], references: [id], onDelete: Cascade)
+
+  @@unique([gitlabInstanceId, gitlabProjectId])
+  @@map("reviewpulse_project_allowlist")
+}
+
+model UserProjectEnable {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  gitlabInstanceId String   @map("gitlab_instance_id")
+  gitlabProjectId  String   @map("gitlab_project_id")
+  enabledAt        DateTime @default(now()) @map("enabled_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gitlabInstanceId, gitlabProjectId])
+  @@map("user_project_enables")
+}
+
+model MembershipCache {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  gitlabInstanceId String   @map("gitlab_instance_id")
+  gitlabProjectId  String   @map("gitlab_project_id")
+  allowed          Boolean
+  checkedAt        DateTime @map("checked_at")
+  expiresAt        DateTime @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gitlabInstanceId, gitlabProjectId])
+  @@index([expiresAt])
+  @@map("membership_caches")
+}
+
+model CommitCache {
+  gitlabInstanceId      String   @map("gitlab_instance_id")
+  gitlabProjectId       String   @map("gitlab_project_id")
+  sha                   String
+  authorEmail           String?  @map("author_email")
+  authorEmailNormalized String?  @map("author_email_normalized")
+  authoredAt            DateTime @map("authored_at")
+  title                 String?
+  webUrl                String?  @map("web_url")
+  rawPayloadUpdatedAt   DateTime @map("raw_payload_updated_at")
+
+  @@id([gitlabInstanceId, gitlabProjectId, sha])
+  @@index([authorEmailNormalized, authoredAt])
+  @@map("commit_caches")
+}
+
+model MergeRequestCache {
+  gitlabInstanceId      String   @map("gitlab_instance_id")
+  gitlabProjectId       String   @map("gitlab_project_id")
+  iid                   Int
+  title                 String?
+  state                 String?
+  authorEmail           String?  @map("author_email")
+  authorEmailNormalized String?  @map("author_email_normalized")
+  headSha               String?  @map("head_sha")
+  webUrl                String?  @map("web_url")
+  updatedAt             DateTime @map("updated_at")
+
+  @@id([gitlabInstanceId, gitlabProjectId, iid])
+  @@index([authorEmailNormalized, updatedAt])
+  @@map("merge_request_caches")
+}
+
+model CommitSyncState {
+  gitlabInstanceId    String    @map("gitlab_instance_id")
+  gitlabProjectId     String    @map("gitlab_project_id")
+  watermarkAuthoredAt DateTime? @map("watermark_authored_at")
+  lastFullWindowStart DateTime? @map("last_full_window_start")
+  lastFullWindowEnd   DateTime? @map("last_full_window_end")
+  lastBranchCursor    String?   @map("last_branch_cursor")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@id([gitlabInstanceId, gitlabProjectId])
+  @@map("commit_sync_states")
+}
+
+model MrSyncState {
+  gitlabInstanceId   String    @map("gitlab_instance_id")
+  gitlabProjectId    String    @map("gitlab_project_id")
+  updatedAfterCursor DateTime? @map("updated_after_cursor")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@id([gitlabInstanceId, gitlabProjectId])
+  @@map("mr_sync_states")
+}
+
+model SyncJob {
+  id               String        @id @default(cuid())
+  jobType          String        @map("job_type")
+  gitlabInstanceId String?       @map("gitlab_instance_id")
+  gitlabProjectId  String?       @map("gitlab_project_id")
+  status           SyncJobStatus @default(pending)
+  attempts         Int           @default(0)
+  lastError        String?       @map("last_error")
+  runAfter         DateTime      @default(now()) @map("run_after")
+  claimedBy        String?       @map("claimed_by")
+  claimedAt        DateTime?     @map("claimed_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@index([status, runAfter])
+  @@map("sync_jobs")
+}
+
+model AuditEvent {
+  id           String   @id @default(cuid())
+  actorUserId  String?  @map("actor_user_id")
+  action       String
+  metaJsonSafe Json     @default("{}") @map("meta_json_safe")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@map("audit_events")
+}
+
+model KpiRuleSet {
+  id            String   @id @default(cuid())
+  role          String
+  version       String
+  effectiveFrom DateTime @map("effective_from")
+  notesJson     Json     @default("{}") @map("notes_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  rules KpiRule[]
+
+  @@unique([role, version])
+  @@map("kpi_rule_sets")
+}
+
+model KpiRule {
+  id            String        @id @default(cuid())
+  rulesetId     String        @map("ruleset_id")
+  metricKey     String        @map("metric_key")
+  referenceMin  Float?        @map("reference_min")
+  referenceMax  Float?        @map("reference_max")
+  unit          String?
+  detectionRule String?       @map("detection_rule")
+  optionsJson   Json          @default("{}") @map("options_json")
+  status        KpiRuleStatus @default(active)
+
+  ruleset KpiRuleSet @relation(fields: [rulesetId], references: [id], onDelete: Cascade)
+
+  @@unique([rulesetId, metricKey])
+  @@map("kpi_rules")
+}
+
+model MetricSnapshot {
+  id                 String   @id @default(cuid())
+  userId             String   @map("user_id")
+  projectScope       String   @map("project_scope")
+  metricKey          String   @map("metric_key")
+  valueNullable      Float?   @map("value_nullable")
+  unit               String?
+  verificationStatus String?  @map("verification_status")
+  ruleVersion        String   @map("rule_version")
+  source             String?
+  detectionRule      String?  @map("detection_rule")
+  calculatedAt       DateTime @map("calculated_at")
+  windowStart        DateTime @map("window_start")
+  windowEnd          DateTime @map("window_end")
+  status             String? // e.g. ok | not_configured — never score/grade/pass/fail
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, metricKey, windowStart])
+  @@map("metric_snapshots")
+}

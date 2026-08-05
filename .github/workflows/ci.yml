@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: WP0 verify (Postgres + quality gates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: reviewpulse
+          POSTGRES_PASSWORD: reviewpulse
+          POSTGRES_DB: reviewpulse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reviewpulse -d reviewpulse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # GitHub Actions maps service ports to localhost on the job container.
+      DATABASE_URL: postgresql://reviewpulse:reviewpulse@localhost:5432/reviewpulse?schema=public
+      # CI-only placeholders — not production secrets; crypto/session unused in WP0.
+      TOKEN_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      SESSION_SECRET: ci-only-session-secret-min-32-chars-xx
+      GITLAB_URL_ALLOWLIST: https://gitlab.example.com
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma format (check)
+        run: npm run format -w @reviewpulse/db -- --check
+
+      - name: Prisma validate
+        run: npm run db:validate
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Apply migrations on clean database
+        run: npm run db:migrate:deploy
+
+      - name: Migration status
+        run: npm run db:migrate:status
+
+      - name: Database readiness smoke
+        run: npm run db:ready-smoke
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
