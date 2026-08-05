@@ -518,9 +518,13 @@ Forbidden: `score`, `grade`, `pass`, `fail`, `verdict`, `dat`, `khong_dat`, `pro
 - Workspace apps/web, apps/worker, packages/*
 - Branch **main**; Docker Compose Postgres; Prisma; env templates
 - CI: lint, typecheck, test
+- **Status: PASS** — 2026-08-05 (merged to main; CI green: migrate + ready-smoke + lint/typecheck/test/build; review P0=0 P1=0)
 
 ### WP1 — Crypto + GitLab credentials
 - AES-GCM + nonce + key_version; PatCredentialProvider; redaction; no PAT in logs
+- **Status: IMPLEMENTED — awaiting verification** — 2026-08-05 on branch `feat/m1-wp1-crypto-credentials`; locks in `docs/PLAN-M1-WP1-Execution.md` (envelope/AAD/key/persistence/transaction/redaction)
+- Local: crypto unit + redaction + migration-invariant tests, lint/typecheck/build, audit clean
+- **Open:** additive migration apply/status and the Postgres credential integration suite need CI (no Docker/Postgres locally) — no WP1 PASS until that job is green
 
 ### WP2 — GitLab read client + SSRF
 - SSRF resolver + redirect policy; commits `since`/`until`; MR `updated_after`; pagination/retry
@@ -661,4 +665,6 @@ Verified present in this plan: AppAuth split; PAT lifecycle 401≠403/404; commi
 - **Auth revised:** AppAuth (email/password) separate from GitLab PAT connection; SSO/OAuth = future
 - **Effort:** M1 ~9–11d after AppAuth split
 - **Outside voice:** not re-run this revision
-- **Next:** Await explicit go-ahead to **implement WP0** only (no code until then)
+- **WP0:** **PASS** (2026-08-05) — merged to main; CI migrate + ready-smoke green; review 0 P0 / 0 P1 / 5 P2 backlog
+- **WP1:** implemented on `feat/m1-wp1-crypto-credentials` per `docs/PLAN-M1-WP1-Execution.md`; AES-256-GCM envelope + AAD, PatCredentialProvider, redaction, additive migration
+- **Next:** CI must confirm migrate apply/status and the Postgres credential integration suite before WP1 = PASS; WP2 stays not started
