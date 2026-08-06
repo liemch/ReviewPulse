@@ -1,28 +1,33 @@
-import Link from "next/link";
+import { IconPulse } from "@/components/icons";
+import { ButtonLink } from "@/components/ui/button";
 
 export default function HomePage() {
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        padding: "4rem 1.25rem",
-        fontFamily: "Georgia, 'Times New Roman', serif",
-        color: "#1b1f22",
-        background:
-          "linear-gradient(160deg, #f4efe4 0%, #e4eef1 45%, #d7e5de 100%)",
-      }}
-    >
-      <div style={{ maxWidth: 640, margin: "0 auto" }}>
-        <h1 style={{ fontSize: "3rem", marginBottom: "0.4rem" }}>ReviewPulse</h1>
-        <p style={{ fontSize: "1.15rem", color: "#44525c" }}>
-          GitLab KPI visibility for engineering teams — invite-only access.
-        </p>
-        <p style={{ marginTop: "2rem" }}>
-          <Link href="/login" style={{ color: "#1f4b3f", fontWeight: 600 }}>
-            Sign in
-          </Link>
-        </p>
+    <div className="rp-auth">
+      <div className="rp-brand">
+        <span className="rp-brand-mark" aria-hidden="true">
+          <IconPulse size={19} />
+        </span>
+        ReviewPulse
       </div>
-    </main>
+
+      <div className="rp-auth-card">
+        <div className="rp-auth-head">
+          <h1 className="rp-auth-title">Theo dõi KPI GitLab</h1>
+          <p className="rp-auth-desc">
+            Công cụ nội bộ giúp đội phát triển theo dõi hoạt động Merge Request
+            và commit trên GitLab. Chỉ đọc dữ liệu, không thay đổi gì trên
+            GitLab.
+          </p>
+        </div>
+        <ButtonLink href="/login" variant="primary" block>
+          Đăng nhập
+        </ButtonLink>
+      </div>
+
+      <p className="rp-auth-foot">
+        Tài khoản chỉ được cấp bởi quản trị viên.
+      </p>
+    </div>
   );
 }

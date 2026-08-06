@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 
+import "./globals.css";
+
 export const metadata: Metadata = {
   title: "ReviewPulse",
-  description: "GitLab KPI visibility — read-only M1",
+  description: "Theo dõi KPI GitLab cho đội phát triển — chỉ đọc (M1)",
 };
 
 export default function RootLayout({
@@ -11,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body style={{ margin: 0, minHeight: "100vh" }}>{children}</body>
+    <html lang="vi">
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,7 +1,10 @@
-import type { CSSProperties } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { IconPulse } from "@/components/icons";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field, TextInput } from "@/components/ui/field";
 import { getServices } from "@/server/services";
 
 export const runtime = "nodejs";
@@ -20,70 +23,59 @@ export default async function LoginPage({
   }
 
   return (
-    <main style={page}>
-      <h1 style={brand}>ReviewPulse</h1>
-      <p style={muted}>Sign in with your ReviewPulse account.</p>
-      {params.error ? <p style={errorText}>Sign-in failed.</p> : null}
-      <form method="post" action="/api/auth/login" style={form}>
-        <input type="hidden" name="csrf" value={csrf} />
-        <label style={label}>
-          Email
-          <input
-            name="email"
-            type="email"
-            required
-            autoComplete="username"
-            style={input}
-          />
-        </label>
-        <label style={label}>
-          Password
-          <input
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            style={input}
-          />
-        </label>
-        <button type="submit" style={button}>
-          Sign in
-        </button>
-      </form>
-      <p style={muted}>Accounts are invite-only. There is no public signup.</p>
-    </main>
+    <div className="rp-auth">
+      <div className="rp-brand">
+        <span className="rp-brand-mark" aria-hidden="true">
+          <IconPulse size={19} />
+        </span>
+        ReviewPulse
+      </div>
+
+      <div className="rp-auth-card">
+        <div className="rp-auth-head">
+          <h1 className="rp-auth-title">Đăng nhập</h1>
+          <p className="rp-auth-desc">Đăng nhập để sử dụng ReviewPulse.</p>
+        </div>
+
+        {params.error ? (
+          <div style={{ marginBottom: "var(--rp-space-4)" }}>
+            <Alert tone="danger" title="Đăng nhập không thành công">
+              Email hoặc mật khẩu không đúng. Vui lòng thử lại.
+            </Alert>
+          </div>
+        ) : null}
+
+        <form method="post" action="/api/auth/login" className="rp-form">
+          <input type="hidden" name="csrf" value={csrf} />
+          <Field id="email" label="Email" required>
+            <TextInput
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="username"
+              placeholder="ten@congty.com"
+            />
+          </Field>
+          <Field id="password" label="Mật khẩu" required>
+            <TextInput
+              id="password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+            />
+          </Field>
+          <Button type="submit" variant="primary" block>
+            Đăng nhập
+          </Button>
+        </form>
+      </div>
+
+      <p className="rp-auth-foot">
+        Tài khoản chỉ được cấp bởi quản trị viên — hệ thống không cho phép tự
+        đăng ký.
+      </p>
+    </div>
   );
 }
-
-const page: CSSProperties = {
-  maxWidth: 420,
-  margin: "0 auto",
-  padding: "4rem 1rem",
-  fontFamily: "Georgia, 'Times New Roman', serif",
-  color: "#1a1a1a",
-};
-const brand: CSSProperties = { fontSize: "2.4rem", marginBottom: "0.25rem" };
-const muted: CSSProperties = { color: "#4a5560", marginBottom: "1.5rem" };
-const errorText: CSSProperties = { color: "#8b1e1e" };
-const form: CSSProperties = { display: "grid", gap: "0.75rem" };
-const label: CSSProperties = {
-  display: "grid",
-  gap: "0.35rem",
-  fontSize: "0.95rem",
-};
-const input: CSSProperties = {
-  padding: "0.6rem 0.7rem",
-  border: "1px solid #8a939c",
-  borderRadius: 4,
-  fontSize: "1rem",
-};
-const button: CSSProperties = {
-  marginTop: "0.5rem",
-  padding: "0.7rem 1rem",
-  background: "#1f4b3f",
-  color: "#f7f3ea",
-  border: "none",
-  borderRadius: 4,
-  fontSize: "1rem",
-  cursor: "pointer",
-};

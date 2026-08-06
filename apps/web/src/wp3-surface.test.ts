@@ -27,9 +27,9 @@ describe("wp3/wp4 security surface", () => {
     assert.equal(names.includes("register"), false);
   });
 
-  it("login page states invite-only and has no signup link", () => {
+  it("login page states accounts are admin-issued and has no signup link", () => {
     const source = readFileSync(join(WEB_SRC, "app/login/page.tsx"), "utf8");
-    assert.match(source, /invite-only/i);
+    assert.match(source, /không cho phép tự\s+đăng ký/i);
     assert.equal(/href=["']\/signup["']/.test(source), false);
   });
 
@@ -62,7 +62,7 @@ describe("wp3/wp4 security surface", () => {
       join(WEB_SRC, "app/settings/gitlab/page.tsx"),
       "utf8",
     );
-    assert.match(source, /never shown again/i);
+    assert.match(source, /không hiển thị lại/i);
     assert.equal(/connection\.pat\b/.test(source), false);
     assert.match(source, /patHintLast4/);
   });
