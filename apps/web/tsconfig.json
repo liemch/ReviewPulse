@@ -26,6 +26,18 @@
       ],
       "@reviewpulse/domain": [
         "../../packages/domain/src/index.ts"
+      ],
+      "@reviewpulse/app-auth": [
+        "../../packages/app-auth/src/index.ts"
+      ],
+      "@reviewpulse/crypto": [
+        "../../packages/crypto/src/index.ts"
+      ],
+      "@reviewpulse/credentials": [
+        "../../packages/credentials/src/index.ts"
+      ],
+      "@reviewpulse/gitlab-client": [
+        "../../packages/gitlab-client/src/index.ts"
       ]
     },
     "declaration": false,

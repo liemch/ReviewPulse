@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: "ReviewPulse",
-  description: "Internal GitLab KPI visibility (M1 read-only)",
+  description: "GitLab KPI visibility — read-only M1",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body style={{ margin: 0, minHeight: "100vh" }}>{children}</body>
     </html>
   );
 }

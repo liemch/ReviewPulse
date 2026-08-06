@@ -57,7 +57,13 @@ export { PrismaClient };
 export type * from "@prisma/client";
 export {
   summarizeEnvIssues,
+  summarizeEnvWarnings,
   validateWp0Env,
+  validateRuntimeEnv,
+  assertRuntimeEnv,
   type EnvCheckResult,
   type EnvIssue,
 } from "./env.js";
+// NOTE: loadMonorepoEnv lives only at `@reviewpulse/db/load-env`.
+// Do not re-export it from this barrel — Next would bundle `process.env.NODE_ENV`
+// assignments into route chunks and emit "Invalid left-hand side in assignment".

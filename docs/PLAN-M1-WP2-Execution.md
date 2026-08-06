@@ -1,11 +1,11 @@
 # WP2 Execution Plan — GitLab read client + SSRF
 
-Status: **APPROVED** — 2026-08-05 (fast-track; A1–A8 locked, A1/A8/pagination tightened)  
+Status: **PASS** — 2026-08-05 (merged to main via PR #4; CI green)  
 Parent: `docs/PLAN-M1-Implementation.md` (APPROVED)  
 Prerequisite: **WP1 = PASS**  
-Branch: `feat/m1-wp2-gitlab-read-client`
+Branch: `feat/m1-wp2-gitlab-read-client` (merged)
 
-Scope is the read-only HTTP client and SSRF/egress hardening only.
+Scope was the read-only HTTP client and SSRF/egress hardening only.
 
 **Out of scope (hard):**
 - AppAuth / session / CSRF / login / UI

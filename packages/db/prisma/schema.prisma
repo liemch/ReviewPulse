@@ -71,6 +71,8 @@ enum KpiRuleStatus {
 model GitLabInstanceAllowlist {
   id                String   @id @default(cuid())
   baseUrlNormalized String   @unique @map("base_url_normalized")
+  label             String?
+  internal          Boolean  @default(false)
   createdAt         DateTime @default(now()) @map("created_at")
 
   connections GitLabConnection[]
@@ -90,6 +92,8 @@ model User {
   invitedAt            DateTime?  @map("invited_at")
   createdAt            DateTime   @default(now()) @map("created_at")
   lastLoginAt          DateTime?  @map("last_login_at")
+  failedLoginCount     Int        @default(0) @map("failed_login_count")
+  lockedUntil          DateTime?  @map("locked_until")
 
   emails           UserEmail[]
   sessions         Session[]
