@@ -98,11 +98,14 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
   /** Visible projects per PAT; a stored Error means "GitLab is unreachable". */
   const visibility = new Map<string, Map<string, VisibleProject>>();
   const visibilityFailures = new Map<string, Error>();
-
   const probedProjectIds: string[] = [];
+  const probedByInstance = new Map<string, string[]>();
 
   const probeAllowlisted: AllowlistedProjectProbe = async (input) => {
     probedProjectIds.push(...input.projectIds);
+    const instanceProbe = probedByInstance.get(input.instanceId) ?? [];
+    instanceProbe.push(...input.projectIds);
+    probedByInstance.set(input.instanceId, instanceProbe);
     const failure = visibilityFailures.get(input.pat);
     if (failure) {
       throw failure;
@@ -175,6 +178,7 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
     visibility.clear();
     visibilityFailures.clear();
     probedProjectIds.length = 0;
+    probedByInstance.clear();
 
     if (ids.length > 0) {
       await prisma.auditEvent.deleteMany({
@@ -479,10 +483,117 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
     const listed = await projects.listForUser(userId);
     const byId = new Map(listed.map((item) => [item.gitlabProjectId, item]));
 
+    assert.deepEqual(probedProjectIds.sort(), ["101", "102"]);
     assert.deepEqual([...byId.keys()].sort(), ["101", "102"]);
     assert.equal(byId.get("101")?.gitlabVisible, true);
     assert.equal(byId.get("102")?.gitlabVisible, false);
     assert.equal(byId.has("103"), false);
+  });
+
+  it("probes exactly one project id when enabling", async () => {
+    const userId = await createUser();
+    const pat = issuePat("4650", "single-enable");
+    await connections.saveConnection({ userId, baseUrl, pat });
+    await allowlistProject("210", "group/enable-one");
+    visibility.set(
+      pat,
+      new Map([["210", visibleProject("210", "group/enable-one")]]),
+    );
+
+    probedProjectIds.length = 0;
+    await projects.enable({
+      userId,
+      gitlabInstanceId: instanceId,
+      gitlabProjectId: "210",
+    });
+
+    assert.deepEqual(probedProjectIds, ["210"]);
+  });
+
+  it("probes only each instance's allowlist ids without mixing instances", async () => {
+    const secondInstanceId = `inst2_${suiteId}`;
+    const secondBaseUrl = `https://gitlab2-${suiteId}.settings.test`;
+    await prisma.gitLabInstanceAllowlist.create({
+      data: {
+        id: secondInstanceId,
+        baseUrlNormalized: secondBaseUrl,
+        internal: false,
+      },
+    });
+
+    let userId: string | undefined;
+    try {
+      userId = await createUser();
+      const firstPat = issuePat("4750", "multi-a");
+      const secondPat = issuePat("4751", "multi-b");
+      await connections.saveConnection({
+        userId,
+        baseUrl,
+        pat: firstPat,
+      });
+      await connections.saveConnection({
+        userId,
+        baseUrl: secondBaseUrl,
+        pat: secondPat,
+      });
+
+      await prisma.reviewPulseProjectAllowlist.createMany({
+        data: [
+          {
+            gitlabInstanceId: instanceId,
+            gitlabProjectId: "801",
+            pathWithNamespace: "group/inst-one",
+          },
+          {
+            gitlabInstanceId: secondInstanceId,
+            gitlabProjectId: "802",
+            pathWithNamespace: "group/inst-two",
+          },
+        ],
+      });
+
+      visibility.set(
+        firstPat,
+        new Map([["801", visibleProject("801", "group/inst-one")]]),
+      );
+      visibility.set(
+        secondPat,
+        new Map([["802", visibleProject("802", "group/inst-two")]]),
+      );
+
+      probedProjectIds.length = 0;
+      probedByInstance.clear();
+
+      const listed = await projects.listForUser(userId);
+      const byKey = new Map(
+        listed.map((item) => [
+          `${item.gitlabInstanceId}:${item.gitlabProjectId}`,
+          item,
+        ]),
+      );
+
+      assert.deepEqual(probedProjectIds.sort(), ["801", "802"]);
+      assert.deepEqual(
+        [...(probedByInstance.get(instanceId) ?? [])].sort(),
+        ["801"],
+      );
+      assert.deepEqual(
+        [...(probedByInstance.get(secondInstanceId) ?? [])].sort(),
+        ["802"],
+      );
+      assert.equal(byKey.get(`${instanceId}:801`)?.gitlabVisible, true);
+      assert.equal(byKey.get(`${secondInstanceId}:802`)?.gitlabVisible, true);
+    } finally {
+      await prisma.gitLabConnection.deleteMany({
+        where: { gitlabInstanceId: secondInstanceId },
+      });
+      await prisma.reviewPulseProjectAllowlist.deleteMany({
+        where: { gitlabInstanceId: secondInstanceId },
+      });
+      await prisma.gitLabInstanceAllowlist.deleteMany({
+        where: { id: secondInstanceId },
+      });
+    }
   });
 
   it("enables only allowlisted projects the caller's PAT can see", async () => {

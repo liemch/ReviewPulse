@@ -28,10 +28,10 @@ WP3 (AppAuth + sessions + CSRF + GitLab connection Settings) and WP4 (instance/p
 | **S11** | Bootstrap | CLI `npm run auth:bootstrap-admin` — password from env/`--password-file` only; no HTTP bootstrap; no committed password |
 | **S12** | GitLab PAT | `PRIVATE-TOKEN` via WP2 client; M1 scope `read_api` only; never shown again in UI |
 | **S13** | Identity | `(gitlab_instance_id, gitlab_user_id)` unique among live connections (existing partial unique index) |
-| **S14** | WP4 authz | Live: allowlist ∩ GitLab-visible (via WP2 `listAccessibleProjects` / `getProject`) ∩ per-user enable. **No membership cache.** Fail closed on GitLab errors / uncertainty. |
+| **S14** | WP4 authz | Live: allowlist ∩ GitLab-visible (via targeted `getProject` per allowlisted id) ∩ per-user enable. **No membership cache.** Fail closed on GitLab errors / uncertainty. Complexity **O(allowlist)**, not O(total visible projects). |
 | **S15** | Admin GitLab | Admin role does **not** imply GitLab project read; admin uses their own PAT connection like any user |
 | **S16** | Migrations | Additive only; never rewrite WP0/WP1 baselines |
-| **S17** | GitLab test seams | `GitLabIdentityProbe` + `VisibleProjectsLoader` are injectable; defaults stay the WP2 client under the SSRF guard (see §6) |
+| **S17** | GitLab test seams | `GitLabIdentityProbe` + `AllowlistedProjectProbe` are injectable; defaults stay the WP2 read client under the SSRF guard (see §6) |
 
 **Out of scope:** WP5–WP8, OAuth/SSO, Redis, webhook, AI/NVIDIA, GitLab mutations, KPI verdicts, email self-serve reset.
 
@@ -112,11 +112,13 @@ No `/signup`. Bootstrap is CLI-only.
 ## 5. Allowlist + enable (WP4)
 
 1. Admin adds instance (canonical origin, `internal` flag) and projects (`gitlab_project_id`, optional path).
-2. User lists: `ReviewPulseProjectAllowlist` for their connected instance(s) ∩ projects returned by `listAccessibleProjects` (paginated drain with WP2 caps).
-3. Enable writes `UserProjectEnable` only if both checks pass in the same request.
+2. User lists: for each connected instance, probe every `gitlabProjectId` in `ReviewPulseProjectAllowlist` via WP2 `getProject` (bounded concurrency, default 5). **Do not** call `listAccessibleProjects` on this path. Intersect probe results with the allowlist row set.
+3. Enable probes **one** project id (`getProject`) after allowlist + connection checks pass in the same request.
 4. Disable deletes/disables own row only.
 5. IDOR: every mutation scopes by `session.userId`; admin allowlist mutations require `role=admin`.
-6. No shared cache as authz. Uncertain GitLab response → fail closed (no enable, empty list with error).
+6. No shared cache as authz. Per-project **403/404** → not visible (row still listed, `gitlabVisible=false`). **401** → credential/connection failure for that instance. **Network/5xx** → fail closed (no enable; list rows carry error).
+
+**Local performance evidence (2026-08-06, `git.fpt.net`):** GitLab visible membership **6409** projects; ReviewPulse allowlist **2**. Before patch: ~**159 s** (~65 paginated `listAccessibleProjects` calls). After patch: ~**599 ms** (**2** `getProject` calls; **0** `listAccessibleProjects` on `/settings/projects` flow).
 
 ---
 
@@ -145,7 +147,7 @@ Verified 2026-08-05 on local PostgreSQL (`reviewpulse`/`public`, 3 migrations, 1
 | Replace supersedes credential + clears membership cache | `domain/gitlab-settings.integration.test.ts` | PASS (DB) |
 | Delete revokes credential (`connection_deleted`) + clears cache | `domain/gitlab-settings.integration.test.ts` | PASS (DB) |
 | Revoked PAT → credential/connection `invalid`, account untouched | `domain/gitlab-settings.integration.test.ts` | PASS (DB) |
-| List = allowlist ∩ GitLab-visible | `domain/gitlab-settings.integration.test.ts` | PASS (DB) |
+| List = allowlist ∩ GitLab-visible (targeted probe, O(allowlist)) | `domain/gitlab-settings.integration.test.ts` + `domain/project-access.test.ts` | PASS |
 | Cannot enable outside allowlist or outside visible set | `domain/gitlab-settings.integration.test.ts` | PASS (DB) |
 | Enable is per-user; disable touches only caller's row | `domain/gitlab-settings.integration.test.ts` | PASS (DB) |
 | Fail closed when GitLab access unverifiable | `domain/gitlab-settings.integration.test.ts` | PASS (DB) |
@@ -158,7 +160,7 @@ Verified 2026-08-05 on local PostgreSQL (`reviewpulse`/`public`, 3 migrations, 1
 
 ### Test seams (locked as **S17**)
 
-`GitLabConnectionService` takes an optional `GitLabIdentityProbe` and `LiveProjectAccessService` an optional `VisibleProjectsLoader`. Defaults are the WP2 read client under the SSRF guard (`createGitLabIdentityProbe` / `createVisibleProjectsLoader`), so production wiring is unchanged. Tests inject stubs because WP2 policy denies loopback for every origin — a local GitLab is not a legal target, so a stub is the only way to exercise these paths on PostgreSQL.
+`GitLabConnectionService` takes an optional `GitLabIdentityProbe` and `LiveProjectAccessService` an optional `AllowlistedProjectProbe`. Defaults are the WP2 read client under the SSRF guard (`createGitLabIdentityProbe` / `createAllowlistedProjectProbe`), so production wiring is unchanged. Tests inject stubs because WP2 policy denies loopback for every origin — a local GitLab is not a legal target, so a stub is the only way to exercise these paths on PostgreSQL.
 
 ---
 
