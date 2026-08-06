@@ -4,6 +4,9 @@
  * Prints only ok/fail — never connection strings or secrets.
  */
 import { checkDatabaseConnectivity } from "./index.js";
+import { loadMonorepoEnv } from "./load-env.js";
+
+loadMonorepoEnv();
 
 const ok = await checkDatabaseConnectivity();
 if (!ok) {

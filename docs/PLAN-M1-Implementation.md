@@ -527,18 +527,23 @@ Forbidden: `score`, `grade`, `pass`, `fail`, `verdict`, `dat`, `khong_dat`, `pro
 
 ### WP2 — GitLab read client + SSRF
 - SSRF resolver + redirect policy; commits `since`/`until`; MR `updated_after`; pagination/retry
-- **Status: APPROVED (fast-track 2026-08-05)** — locks in `docs/PLAN-M1-WP2-Execution.md`; A1–A8 approved with A1/A8/pagination tightened
-- Branch: `feat/m1-wp2-gitlab-read-client`
+- **Status: PASS** — 2026-08-05 (merged to main via PR #4; CI green: SSRF/DNS pin + pagination/retry + mock HTTP matrix + TLS smoke without public TLS-bypass hooks; lint/typecheck/test/build/audit)
+- Locks: `docs/PLAN-M1-WP2-Execution.md`
+- Branch: `feat/m1-wp2-gitlab-read-client` (merged)
 
 ### WP3 — AppAuth + sessions + CSRF
 - Admin invite/create user; Argon2id login; server-side sessions; rotate; revoke-all; deactivate; CSRF; lockout; audit
-- **Effort ↑** vs prior PAT-as-login plan
+- **Status: APPROVED (fast-track with WP4)** — locks in `docs/PLAN-M1-WP3-WP4-Execution.md`
+- Branch: `feat/m1-wp3-wp4-auth-projects`
 
 ### WP3b — GitLab connection Settings
 - Add/test/replace/delete connection; identity uniqueness; UI hints only; lifecycle 401/403
+- **Bundled with WP3** in this fast-track (same branch/plan)
 
 ### WP4 — Allowlist + enable
 - Intersection listing; per-user enable
+- **Status: APPROVED (fast-track with WP3)** — locks in `docs/PLAN-M1-WP3-WP4-Execution.md`
+- Branch: `feat/m1-wp3-wp4-auth-projects`
 
 ### WP5 — Membership + ProjectAccess
 - TTL 300s; 401 vs 403 paths; fail closed
@@ -668,5 +673,6 @@ Verified present in this plan: AppAuth split; PAT lifecycle 401≠403/404; commi
 - **Outside voice:** not re-run this revision
 - **WP0:** **PASS** (2026-08-05) — merged to main; CI migrate + ready-smoke green; review 0 P0 / 0 P1 / 5 P2 backlog
 - **WP1:** **PASS** (2026-08-05) — merged to main; AES-GCM + credential provider + Postgres integration CI green; review ready-to-merge for WP1 scope
-- **WP2:** execution plan **APPROVED** in `docs/PLAN-M1-WP2-Execution.md` (fast-track 2026-08-05) — implementing on `feat/m1-wp2-gitlab-read-client`
-- **Next:** WP2 verification → do not start WP3 until WP2 = PASS
+- **WP2:** **PASS** (2026-08-05) — merged to main (PR #4); SSRF-hardened read client + TLS smoke CI green
+- **WP3+WP4:** implemented on `feat/m1-wp3-wp4-auth-projects` — all gates green on local PostgreSQL (324 tests, 0 skipped; migrations applied; audit clean); execution plan + test matrix evidence in `docs/PLAN-M1-WP3-WP4-Execution.md`; mark **PASS** after review/merge
+- **Next:** review WP3+WP4 → do not start WP5 until WP3+WP4 = PASS

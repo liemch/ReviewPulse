@@ -36,6 +36,7 @@ jobs:
       TOKEN_ENCRYPTION_KEY_VERSION: v1
       SESSION_SECRET: ci-only-session-secret-min-32-chars-xx
       GITLAB_URL_ALLOWLIST: https://gitlab.example.com
+      APP_ORIGIN: http://localhost:3000
       NODE_ENV: test
 
     steps:

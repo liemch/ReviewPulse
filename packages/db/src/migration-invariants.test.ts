@@ -102,3 +102,34 @@ describe("WP1 credential envelope migration invariants", () => {
     );
   });
 });
+
+describe("WP3/WP4 auth settings migration invariants", () => {
+  const sql = readFileSync(
+    join(migrationsDir, "20260805180000_wp3_wp4_auth_settings/migration.sql"),
+    "utf8",
+  );
+
+  it("adds lockout columns and instance allowlist metadata", () => {
+    assert.match(sql, /ADD COLUMN "failed_login_count"/);
+    assert.match(sql, /ADD COLUMN "locked_until"/);
+    assert.match(
+      sql,
+      /ALTER TABLE "gitlab_instance_allowlist" ADD COLUMN "label"/,
+    );
+    assert.match(
+      sql,
+      /ALTER TABLE "gitlab_instance_allowlist" ADD COLUMN "internal"/,
+    );
+  });
+
+  it("is additive and stores no plaintext secrets", () => {
+    assert.equal(/\bDROP\b/i.test(sql), false);
+    assert.equal(/\bTRUNCATE\b/i.test(sql), false);
+    assert.equal(/\bDELETE FROM\b/i.test(sql), false);
+    assert.equal(/password|session_token|pat_plaintext|glpat-/i.test(sql), false);
+    assert.equal(
+      /TOKEN_ENCRYPTION_KEY|SESSION_SECRET|BEGIN PRIVATE/i.test(sql),
+      false,
+    );
+  });
+});

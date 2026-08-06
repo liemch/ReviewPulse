@@ -1,30 +1,61 @@
-/** WP0 stubs — no PAT/password deps. Implementations land in later WPs. */
+/**
+ * WP3b GitLab connection + WP4 allowlist/enable services.
+ */
 
-export type ProjectRef = {
-  gitlabInstanceId: string;
-  gitlabProjectId: string;
-};
+import type { PrismaClient } from "@reviewpulse/db";
+import {
+  createPatCredentialProvider,
+  type PatCredentialProvider,
+} from "@reviewpulse/credentials";
+import {
+  AesGcmSecretSealer,
+  createEnvKeyLoader,
+  type SecretSealer,
+} from "@reviewpulse/crypto";
 
-export type SyncJobSpec = {
-  jobType: string;
-  gitlabInstanceId?: string;
-  gitlabProjectId?: string;
-};
+export type {
+  JobQueue,
+  ProjectAccessService,
+  ProjectRef,
+  SyncJob,
+  SyncJobSpec,
+} from "./types.js";
 
-export type SyncJob = SyncJobSpec & {
-  id: string;
-  status: "pending" | "running" | "completed" | "failed" | "sync_blocked";
-};
+export {
+  AllowlistAdminService,
+  type InstanceAllowlistRow,
+  type ProjectAllowlistRow,
+} from "./allowlist-admin.js";
+export {
+  ConnectionPolicyError,
+  createGitLabIdentityProbe,
+  GitLabConnectionService,
+  type ConnectionView,
+  type GitLabIdentityProbe,
+  type TestConnectionResult,
+} from "./gitlab-connection.js";
+export {
+  createVisibleProjectsLoader,
+  LiveProjectAccessService,
+  type ProjectListItem,
+  type VisibleProject,
+  type VisibleProjectsLoader,
+} from "./project-access.js";
 
-export interface ProjectAccessService {
-  authorizedProjectIds(userId: string): Promise<ProjectRef[]>;
+export function createDefaultSealer(
+  env: Record<string, string | undefined> = process.env,
+): SecretSealer {
+  const loader = createEnvKeyLoader(env as NodeJS.ProcessEnv);
+  return new AesGcmSecretSealer(loader);
 }
 
-export interface JobQueue {
-  enqueue(job: SyncJobSpec): Promise<void>;
-  claim(workerId: string): Promise<SyncJob | null>;
-  complete(id: string): Promise<void>;
-  fail(id: string, err: string, retryAt?: Date): Promise<void>;
+export function createDefaultCredentialProvider(
+  prisma: PrismaClient,
+  sealer: SecretSealer = createDefaultSealer(),
+): PatCredentialProvider {
+  return createPatCredentialProvider({ prisma, sealer });
 }
+
+export type { PatCredentialProvider, SecretSealer };
 
 export const PACKAGE_NAME = "@reviewpulse/domain" as const;
