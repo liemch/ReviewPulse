@@ -116,6 +116,19 @@ describe("validateRuntimeEnv", () => {
     );
   });
 
+  it("rejects a non-positive membership cache TTL when set", () => {
+    const result = validateRuntimeEnv({
+      ...good,
+      MEMBERSHIP_CACHE_TTL_SECONDS: "0",
+    });
+    assert.equal(result.ok, false);
+    assert.ok(
+      summarizeEnvIssues(result).some((m) =>
+        m.includes("MEMBERSHIP_CACHE_TTL_SECONDS"),
+      ),
+    );
+  });
+
   it("never embeds secret values in runtime issue messages", () => {
     const secret = "leak-me-please-abcdefghijklmnopqrstuvwxyz012345";
     const result = validateRuntimeEnv({

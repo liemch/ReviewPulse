@@ -711,6 +711,7 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
     });
 
     visibilityFailures.set(pat, new GitLabUnauthorizedError({ reason: "expired" }));
+    await prisma.membershipCache.deleteMany({ where: { userId } });
 
     const listed = await projects.listForUser(userId);
     assert.equal(listed.length, 1);
