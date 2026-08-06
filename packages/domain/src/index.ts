@@ -27,6 +27,15 @@ export {
   type ProjectAllowlistRow,
 } from "./allowlist-admin.js";
 export {
+  DEFAULT_MEMBERSHIP_CACHE_TTL_SECONDS,
+  membershipCacheTtlFromEnv,
+  parseMembershipCacheTtlSeconds,
+} from "./membership-cache-config.js";
+export {
+  MembershipCacheStore,
+  type MembershipCacheLookup,
+} from "./membership-cache.js";
+export {
   ConnectionPolicyError,
   createGitLabIdentityProbe,
   GitLabConnectionService,
@@ -35,11 +44,12 @@ export {
   type TestConnectionResult,
 } from "./gitlab-connection.js";
 export {
-  createVisibleProjectsLoader,
+  createAllowlistedProjectProbe,
   LiveProjectAccessService,
+  probeAllowlistedProjectIds,
+  type AllowlistedProjectProbe,
   type ProjectListItem,
   type VisibleProject,
-  type VisibleProjectsLoader,
 } from "./project-access.js";
 
 export function createDefaultSealer(

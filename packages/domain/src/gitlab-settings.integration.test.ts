@@ -2,7 +2,7 @@
  * WP3b + WP4 PostgreSQL integration tests: PAT vault wiring, GitLab identity
  * binding, IDOR scoping, allowlist intersection, and per-user enable.
  *
- * The GitLab side is injected (`GitLabIdentityProbe` / `VisibleProjectsLoader`)
+ * The GitLab side is injected (`GitLabIdentityProbe` / `AllowlistedProjectProbe`)
  * because the WP2 SSRF policy denies loopback for every origin, allowlisted or
  * not — so a live local GitLab is not a legal target. The default seams remain
  * the WP2 read client and are covered by the gitlab-client suite.
@@ -30,8 +30,8 @@ import {
 } from "./gitlab-connection.js";
 import {
   LiveProjectAccessService,
+  type AllowlistedProjectProbe,
   type VisibleProject,
-  type VisibleProjectsLoader,
 } from "./project-access.js";
 
 async function probeDatabase(): Promise<boolean> {
@@ -99,19 +99,30 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
   const visibility = new Map<string, Map<string, VisibleProject>>();
   const visibilityFailures = new Map<string, Error>();
 
-  const loadVisible: VisibleProjectsLoader = async (input) => {
+  const probedProjectIds: string[] = [];
+
+  const probeAllowlisted: AllowlistedProjectProbe = async (input) => {
+    probedProjectIds.push(...input.projectIds);
     const failure = visibilityFailures.get(input.pat);
     if (failure) {
       throw failure;
     }
-    return visibility.get(input.pat) ?? new Map();
+    const all = visibility.get(input.pat) ?? new Map();
+    const out = new Map<string, VisibleProject>();
+    for (const id of input.projectIds) {
+      const ref = all.get(id);
+      if (ref) {
+        out.set(id, ref);
+      }
+    }
+    return out;
   };
 
   const connections = new GitLabConnectionService(prisma, credentials, probe);
   const projects = new LiveProjectAccessService(
     prisma,
     credentials,
-    loadVisible,
+    probeAllowlisted,
   );
 
   function fixtureId(): string {
@@ -163,6 +174,7 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
     probeFailures.clear();
     visibility.clear();
     visibilityFailures.clear();
+    probedProjectIds.length = 0;
 
     if (ids.length > 0) {
       await prisma.auditEvent.deleteMany({
@@ -588,6 +600,7 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
     });
 
     visibilityFailures.set(pat, new GitLabUnauthorizedError({ reason: "expired" }));
+    await prisma.membershipCache.deleteMany({ where: { userId } });
 
     const listed = await projects.listForUser(userId);
     assert.equal(listed.length, 1);

@@ -208,6 +208,17 @@ export function validateRuntimeEnv(
     }
   }
 
+  const membershipTtl = env.MEMBERSHIP_CACHE_TTL_SECONDS?.trim() ?? "";
+  if (membershipTtl.length > 0) {
+    const parsed = Number(membershipTtl);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      issues.push({
+        key: "MEMBERSHIP_CACHE_TTL_SECONDS",
+        message: "must be a positive integer when set",
+      });
+    }
+  }
+
   return { ok: issues.length === 0, issues, warnings };
 }
 

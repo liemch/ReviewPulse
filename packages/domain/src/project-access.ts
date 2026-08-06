@@ -1,8 +1,9 @@
 /**
- * WP4 live project access — no membership cache.
+ * WP4 + WP5 project access.
  *
  * authorized = ReviewPulse allowlist ∩ GitLab-visible (via user PAT) ∩ enable.
- * Fail closed when GitLab cannot be reached or the user has no connection.
+ * Visibility probes use targeted getProject per allowlist id with optional
+ * membership cache (TTL default 300s). Fail closed on uncertainty.
  */
 
 import type { PrismaClient } from "@reviewpulse/db";
@@ -12,15 +13,17 @@ import {
   createGitLabReadClient,
   createPatAuthAdapter,
   createSsrfGuard,
-  drainPages,
   GitLabProjectForbiddenError,
   GitLabProjectNotFoundError,
   GitLabUnauthorizedError,
+  type GitLabReadClient,
   type GitLabProjectRef,
 } from "@reviewpulse/gitlab-client";
 
 import type { ProjectAccessService, ProjectRef } from "./types.js";
 import { ConnectionPolicyError } from "./gitlab-connection.js";
+import { MembershipCacheStore } from "./membership-cache.js";
+import { membershipCacheTtlFromEnv } from "./membership-cache-config.js";
 
 export type ProjectListItem = {
   gitlabInstanceId: string;
@@ -38,20 +41,26 @@ export type VisibleProject = Pick<
   "id" | "pathWithNamespace" | "name"
 >;
 
-/**
- * Loads GitLab-visible projects for one connection. The default implementation
- * drains the WP2 read client under the SSRF guard; tests inject a stub.
- */
-export type VisibleProjectsLoader = (input: {
+/** Targeted visibility probe — one GitLab request per allowlisted project id. */
+export type AllowlistedProjectProbe = (input: {
   connectionId: string;
   instanceId: string;
   baseUrlNormalized: string;
   internal: boolean;
   pat: string;
+  projectIds: readonly string[];
 }) => Promise<Map<string, VisibleProject>>;
 
-export function createVisibleProjectsLoader(): VisibleProjectsLoader {
+const DEFAULT_PROBE_CONCURRENCY = 5;
+
+export function createAllowlistedProjectProbe(
+  concurrency = DEFAULT_PROBE_CONCURRENCY,
+): AllowlistedProjectProbe {
   return async (input) => {
+    if (input.projectIds.length === 0) {
+      return new Map();
+    }
+
     const client = createGitLabReadClient({
       instance: {
         instanceId: input.instanceId,
@@ -65,33 +74,93 @@ export function createVisibleProjectsLoader(): VisibleProjectsLoader {
       }),
     });
 
+    return probeAllowlistedProjectIds(client, input.projectIds, concurrency);
+  };
+}
+
+/**
+ * Probes GitLab visibility for explicit allowlist ids via GET /projects/:id.
+ * Exported for unit tests with a mock read client.
+ */
+export async function probeAllowlistedProjectIds(
+  client: Pick<GitLabReadClient, "getProject">,
+  projectIds: readonly string[],
+  concurrency = DEFAULT_PROBE_CONCURRENCY,
+): Promise<Map<string, VisibleProject>> {
+  if (projectIds.length === 0) {
+    return new Map();
+  }
+
+  const visible = new Map<string, VisibleProject>();
+
+  await mapWithConcurrency(projectIds, concurrency, async (projectId) => {
     try {
-      const projects = await drainPages(
-        (cursor) => client.listAccessibleProjects({ page: cursor }),
-        { perPage: 100, maxPages: 100, maxItems: 10_000 },
-      );
-      return new Map(
-        projects.map((project) => [String(project.id), project] as const),
-      );
+      const ref = await client.getProject(projectId);
+      visible.set(projectId, {
+        id: ref.id,
+        pathWithNamespace: ref.pathWithNamespace,
+        name: ref.name,
+      });
     } catch (error) {
-      // 403/404 mean "not visible to this PAT", not "GitLab is broken" (D4).
       if (
         error instanceof GitLabProjectForbiddenError ||
         error instanceof GitLabProjectNotFoundError
       ) {
-        return new Map();
+        return;
       }
       throw error;
     }
-  };
+  });
+
+  return visible;
 }
 
+async function mapWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) {
+    return;
+  }
+
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) {
+        return;
+      }
+      await fn(items[index] as T);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+}
+
+type ConnectionWithInstance = {
+  id: string;
+  gitlabInstanceId: string;
+  userId: string;
+  instance: { baseUrlNormalized: string; internal: boolean; id: string };
+};
+
 export class LiveProjectAccessService implements ProjectAccessService {
+  private readonly membershipCache: MembershipCacheStore;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly credentials: PatCredentialProvider,
-    private readonly loadVisible: VisibleProjectsLoader = createVisibleProjectsLoader(),
-  ) {}
+    private readonly probeAllowlisted: AllowlistedProjectProbe = createAllowlistedProjectProbe(),
+    membershipCache?: MembershipCacheStore,
+  ) {
+    this.membershipCache =
+      membershipCache ??
+      new MembershipCacheStore(prisma, membershipCacheTtlFromEnv());
+  }
 
   async listForUser(userId: string): Promise<ProjectListItem[]> {
     const connections = await this.prisma.gitLabConnection.findMany({
@@ -117,9 +186,10 @@ export class LiveProjectAccessService implements ProjectAccessService {
         continue;
       }
 
-      let visible: Map<string, VisibleProject>;
+      const projectIds = instanceProjects.map((row) => row.gitlabProjectId);
+      let visibility: Map<string, VisibleProject | null>;
       try {
-        visible = await this.loadVisibleProjects(connection);
+        visibility = await this.resolveVisibility(connection, projectIds);
       } catch (error) {
         const message =
           error instanceof GitLabUnauthorizedError
@@ -142,14 +212,18 @@ export class LiveProjectAccessService implements ProjectAccessService {
       }
 
       for (const project of instanceProjects) {
-        const ref = visible.get(project.gitlabProjectId);
+        const ref = visibility.get(project.gitlabProjectId);
+        const gitlabVisible = ref !== undefined && ref !== null;
         out.push({
           gitlabInstanceId: project.gitlabInstanceId,
           gitlabProjectId: project.gitlabProjectId,
           pathWithNamespace:
-            ref?.pathWithNamespace ?? project.pathWithNamespace,
-          name: ref?.name ?? null,
-          gitlabVisible: ref !== undefined,
+            ref?.pathWithNamespace && ref.pathWithNamespace.length > 0
+              ? ref.pathWithNamespace
+              : project.pathWithNamespace,
+          name:
+            ref?.name && ref.name.length > 0 ? ref.name : null,
+          gitlabVisible,
           enabled: enableSet.has(
             `${project.gitlabInstanceId}:${project.gitlabProjectId}`,
           ),
@@ -191,8 +265,11 @@ export class LiveProjectAccessService implements ProjectAccessService {
       throw new ConnectionPolicyError("No active GitLab connection");
     }
 
-    const visible = await this.loadVisibleProjects(connection);
-    if (!visible.has(input.gitlabProjectId)) {
+    const visible = await this.resolveVisibility(connection, [
+      input.gitlabProjectId,
+    ]);
+    const ref = visible.get(input.gitlabProjectId);
+    if (ref === undefined || ref === null) {
       throw new ConnectionPolicyError("Project is not visible to your PAT");
     }
 
@@ -225,6 +302,11 @@ export class LiveProjectAccessService implements ProjectAccessService {
         gitlabProjectId: input.gitlabProjectId,
       },
     });
+    await this.membershipCache.invalidateUserProject(
+      input.userId,
+      input.gitlabInstanceId,
+      input.gitlabProjectId,
+    );
   }
 
   async authorizedProjectIds(userId: string): Promise<ProjectRef[]> {
@@ -237,18 +319,105 @@ export class LiveProjectAccessService implements ProjectAccessService {
       }));
   }
 
-  private async loadVisibleProjects(connection: {
-    id: string;
-    gitlabInstanceId: string;
-    instance: { baseUrlNormalized: string; internal: boolean; id: string };
-  }): Promise<Map<string, VisibleProject>> {
+  /**
+   * Resolves visibility for allowlisted ids using fresh cache hits and live
+   * probes for missing/expired entries. Map values: VisibleProject when
+   * allowed, null when denied, absent keys when uncertain (fail closed).
+   */
+  private async resolveVisibility(
+    connection: ConnectionWithInstance,
+    projectIds: readonly string[],
+  ): Promise<Map<string, VisibleProject | null>> {
+    const out = new Map<string, VisibleProject | null>();
+    if (projectIds.length === 0) {
+      return out;
+    }
+
+    const fresh = await this.membershipCache.lookupFreshMany(
+      connection.userId,
+      connection.gitlabInstanceId,
+      projectIds,
+    );
+
+    const toProbe: string[] = [];
+    for (const projectId of projectIds) {
+      const cached = fresh.get(projectId);
+      if (cached === undefined) {
+        toProbe.push(projectId);
+        continue;
+      }
+        out.set(projectId, cached
+          ? { id: Number(projectId), pathWithNamespace: "", name: "" }
+          : null);
+    }
+
+    if (toProbe.length === 0) {
+      return out;
+    }
+
+    let probed: Map<string, VisibleProject>;
+    try {
+      probed = await this.probeAllowlistedProjects(connection, toProbe);
+    } catch (error) {
+      if (error instanceof GitLabUnauthorizedError) {
+        await this.handleGitLabUnauthorized(connection);
+      }
+      throw error;
+    }
+
+    for (const projectId of toProbe) {
+      const ref = probed.get(projectId);
+      if (ref) {
+        await this.membershipCache.write(
+          connection.userId,
+          connection.gitlabInstanceId,
+          projectId,
+          true,
+        );
+        out.set(projectId, ref);
+      } else {
+        await this.membershipCache.write(
+          connection.userId,
+          connection.gitlabInstanceId,
+          projectId,
+          false,
+        );
+        out.set(projectId, null);
+      }
+    }
+
+    return out;
+  }
+
+  private async handleGitLabUnauthorized(
+    connection: ConnectionWithInstance,
+  ): Promise<void> {
+    await this.credentials.invalidateCredential(
+      connection.id,
+      "gitlab_unauthorized",
+    );
+    await this.prisma.gitLabConnection.update({
+      where: { id: connection.id },
+      data: { status: "invalid" },
+    });
+    await this.membershipCache.invalidateUserInstance(
+      connection.userId,
+      connection.gitlabInstanceId,
+    );
+  }
+
+  private async probeAllowlistedProjects(
+    connection: ConnectionWithInstance,
+    projectIds: readonly string[],
+  ): Promise<Map<string, VisibleProject>> {
     const pat = await this.credentials.getAccessToken(connection.id);
-    return await this.loadVisible({
+    return await this.probeAllowlisted({
       connectionId: connection.id,
       instanceId: connection.instance.id,
       baseUrlNormalized: connection.instance.baseUrlNormalized,
       internal: connection.instance.internal,
       pat,
+      projectIds,
     });
   }
 }

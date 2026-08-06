@@ -57,6 +57,9 @@ export class AllowlistAdminService {
   }
 
   async removeInstance(instanceId: string): Promise<void> {
+    await this.prisma.membershipCache.deleteMany({
+      where: { gitlabInstanceId: instanceId },
+    });
     await this.prisma.gitLabInstanceAllowlist.delete({
       where: { id: instanceId },
     });
@@ -100,6 +103,18 @@ export class AllowlistAdminService {
   }
 
   async removeProject(allowlistId: string): Promise<void> {
+    const row = await this.prisma.reviewPulseProjectAllowlist.findUnique({
+      where: { id: allowlistId },
+      select: { gitlabInstanceId: true, gitlabProjectId: true },
+    });
+    if (row) {
+      await this.prisma.membershipCache.deleteMany({
+        where: {
+          gitlabInstanceId: row.gitlabInstanceId,
+          gitlabProjectId: row.gitlabProjectId,
+        },
+      });
+    }
     await this.prisma.reviewPulseProjectAllowlist.delete({
       where: { id: allowlistId },
     });

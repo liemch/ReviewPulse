@@ -113,6 +113,9 @@ export class UserAdminService {
       where: { id: input.userId },
       data: { status: "deactivated" },
     });
+    await this.prisma.membershipCache.deleteMany({
+      where: { userId: input.userId },
+    });
     await this.sessions.revokeAllForUser(input.userId, input.actor.id);
     await this.audit.write("user_deactivated", input.actor.id, {
       targetUserId: input.userId,
