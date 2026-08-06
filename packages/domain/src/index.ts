@@ -35,11 +35,12 @@ export {
   type TestConnectionResult,
 } from "./gitlab-connection.js";
 export {
-  createVisibleProjectsLoader,
+  createAllowlistedProjectProbe,
   LiveProjectAccessService,
+  probeAllowlistedProjectIds,
+  type AllowlistedProjectProbe,
   type ProjectListItem,
   type VisibleProject,
-  type VisibleProjectsLoader,
 } from "./project-access.js";
 
 export function createDefaultSealer(
