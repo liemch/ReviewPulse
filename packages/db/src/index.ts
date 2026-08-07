@@ -53,6 +53,24 @@ export async function checkDatabaseConnectivity(): Promise<boolean> {
   }
 }
 
+/** Close both Prisma and its externally-owned pg pool (worker/tests). */
+export async function disconnectDatabase(): Promise<void> {
+  const client = globalThis.__reviewpulsePrisma;
+  const pool = globalThis.__reviewpulsePgPool;
+  globalThis.__reviewpulsePrisma = undefined;
+  globalThis.__reviewpulsePgPool = undefined;
+  if (client) {
+    await client.$disconnect();
+  }
+  if (pool) {
+    try {
+      await pool.end();
+    } catch {
+      // Prisma adapters may already have disposed the external pool.
+    }
+  }
+}
+
 export { PrismaClient };
 export type * from "@prisma/client";
 export {
@@ -60,9 +78,11 @@ export {
   summarizeEnvWarnings,
   validateWp0Env,
   validateRuntimeEnv,
+  parseSyncRuntimeConfig,
   assertRuntimeEnv,
   type EnvCheckResult,
   type EnvIssue,
+  type SyncRuntimeConfig,
 } from "./env.js";
 // NOTE: loadMonorepoEnv lives only at `@reviewpulse/db/load-env`.
 // Do not re-export it from this barrel — Next would bundle `process.env.NODE_ENV`

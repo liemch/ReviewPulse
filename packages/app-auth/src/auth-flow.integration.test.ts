@@ -2,8 +2,8 @@
  * WP3 PostgreSQL integration tests: sessions, rotation, expiry, lockout,
  * deactivation, and audit hygiene against real rows.
  *
- * Requires a migrated database via DATABASE_URL. Locally (no Docker) the suite
- * skips; in CI it must run, so a missing database fails the job loudly.
+ * Requires a migrated database via DATABASE_URL. The shared setup loads the
+ * monorepo root `.env` and fails loudly when PostgreSQL is unavailable.
  */
 
 import assert from "node:assert/strict";
@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, it } from "node:test";
 
 import { getPrisma, type PrismaClient } from "@reviewpulse/db";
+import { requirePostgresIntegrationDatabase } from "@reviewpulse/db/integration-test-setup";
 
 import { AuditWriter } from "./audit.js";
 import {
@@ -29,31 +30,9 @@ import { UserAdminService } from "./user-admin.js";
 const SESSION_SECRET = "integration-only-session-secret-0123456789";
 const PASSWORD = "correct-horse-battery-staple";
 
-async function probeDatabase(): Promise<boolean> {
-  if (!process.env.DATABASE_URL) {
-    return false;
-  }
-  try {
-    await getPrisma().$queryRaw`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  }
-}
+await requirePostgresIntegrationDatabase("AppAuth integration tests");
 
-const databaseReachable = await probeDatabase();
-
-if (!databaseReachable && process.env.CI) {
-  throw new Error(
-    "AppAuth integration tests require a migrated PostgreSQL database (DATABASE_URL)",
-  );
-}
-
-const skip = databaseReachable
-  ? false
-  : "PostgreSQL not reachable via DATABASE_URL";
-
-describe("WP3 AppAuth (PostgreSQL)", { skip }, () => {
+describe("WP3 AppAuth (PostgreSQL)", () => {
   const prisma: PrismaClient = getPrisma();
   const policy: SessionPolicy = loadSessionPolicy({
     SESSION_SECRET,

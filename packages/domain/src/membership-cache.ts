@@ -5,7 +5,10 @@
 
 import type { PrismaClient } from "@reviewpulse/db";
 
-import { DEFAULT_MEMBERSHIP_CACHE_TTL_SECONDS } from "./membership-cache-config.js";
+import {
+  DEFAULT_MEMBERSHIP_CACHE_TTL_SECONDS,
+  parseMembershipCacheNegativeTtlSeconds,
+} from "./membership-cache-config.js";
 
 export type MembershipCacheLookup =
   | { kind: "fresh"; allowed: boolean }
@@ -13,10 +16,18 @@ export type MembershipCacheLookup =
   | { kind: "expired" };
 
 export class MembershipCacheStore {
+  private readonly negativeTtlSeconds: number;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly ttlSeconds = DEFAULT_MEMBERSHIP_CACHE_TTL_SECONDS,
-  ) {}
+    negativeTtlSeconds?: number,
+  ) {
+    this.negativeTtlSeconds = Math.min(
+      negativeTtlSeconds ?? parseMembershipCacheNegativeTtlSeconds(undefined, ttlSeconds),
+      ttlSeconds,
+    );
+  }
 
   async lookup(
     userId: string,
@@ -73,7 +84,8 @@ export class MembershipCacheStore {
     now: Date = new Date(),
   ): Promise<void> {
     const checkedAt = now;
-    const expiresAt = new Date(now.getTime() + this.ttlSeconds * 1000);
+    const ttlSeconds = allowed ? this.ttlSeconds : this.negativeTtlSeconds;
+    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
     await this.prisma.membershipCache.upsert({
       where: {
         userId_gitlabInstanceId_gitlabProjectId: {

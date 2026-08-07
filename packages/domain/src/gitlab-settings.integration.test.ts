@@ -7,8 +7,8 @@
  * not — so a live local GitLab is not a legal target. The default seams remain
  * the WP2 read client and are covered by the gitlab-client suite.
  *
- * Requires a migrated database via DATABASE_URL. Locally (no Docker) the suite
- * skips; in CI it must run, so a missing database fails the job loudly.
+ * Requires a migrated database via DATABASE_URL. The shared setup loads the
+ * monorepo root `.env` and fails loudly when PostgreSQL is unavailable.
  */
 
 import assert from "node:assert/strict";
@@ -21,6 +21,7 @@ import {
 } from "@reviewpulse/crypto";
 import { createPatCredentialProvider } from "@reviewpulse/credentials";
 import { getPrisma, type PrismaClient } from "@reviewpulse/db";
+import { requirePostgresIntegrationDatabase } from "@reviewpulse/db/integration-test-setup";
 import { GitLabUnauthorizedError } from "@reviewpulse/gitlab-client";
 
 import {
@@ -34,35 +35,13 @@ import {
   type VisibleProject,
 } from "./project-access.js";
 
-async function probeDatabase(): Promise<boolean> {
-  if (!process.env.DATABASE_URL) {
-    return false;
-  }
-  try {
-    await getPrisma().$queryRaw`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const databaseReachable = await probeDatabase();
-
-if (!databaseReachable && process.env.CI) {
-  throw new Error(
-    "GitLab settings integration tests require a migrated PostgreSQL database (DATABASE_URL)",
-  );
-}
-
-const skip = databaseReachable
-  ? false
-  : "PostgreSQL not reachable via DATABASE_URL";
+await requirePostgresIntegrationDatabase("GitLab settings integration tests");
 
 function visibleProject(id: string, path: string): VisibleProject {
   return { id: Number(id), pathWithNamespace: path, name: path.split("/")[1] ?? path };
 }
 
-describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
+describe("WP3b/WP4 GitLab settings (PostgreSQL)", () => {
   const prisma: PrismaClient = getPrisma();
   const sealer = new AesGcmSecretSealer(
     createStaticKeyLoader(randomBytes(32).toString("base64"), "v1"),
@@ -118,7 +97,7 @@ describe("WP3b/WP4 GitLab settings (PostgreSQL)", { skip }, () => {
         out.set(id, ref);
       }
     }
-    return out;
+    return { visible: out, failed: new Map() };
   };
 
   const connections = new GitLabConnectionService(prisma, credentials, probe);
