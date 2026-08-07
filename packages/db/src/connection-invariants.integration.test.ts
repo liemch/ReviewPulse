@@ -5,8 +5,8 @@
  * These are the constraints every test fixture in the repo has to respect, so
  * a regression here explains fixture failures elsewhere.
  *
- * Requires a migrated database via DATABASE_URL. Locally (no Docker) the suite
- * skips; in CI it must run, so a missing database fails the job loudly.
+ * Requires a migrated database via DATABASE_URL. The shared setup loads the
+ * monorepo root `.env` and fails loudly when PostgreSQL is unavailable.
  */
 
 import assert from "node:assert/strict";
@@ -14,30 +14,9 @@ import { randomUUID } from "node:crypto";
 import { after, afterEach, before, describe, it } from "node:test";
 
 import { getPrisma, type PrismaClient } from "./index.js";
+import { requirePostgresIntegrationDatabase } from "./integration-test-setup.js";
 
-async function probeDatabase(): Promise<boolean> {
-  if (!process.env.DATABASE_URL) {
-    return false;
-  }
-  try {
-    await getPrisma().$queryRaw`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const databaseReachable = await probeDatabase();
-
-if (!databaseReachable && process.env.CI) {
-  throw new Error(
-    "Connection invariant tests require a migrated PostgreSQL database (DATABASE_URL)",
-  );
-}
-
-const skip = databaseReachable
-  ? false
-  : "PostgreSQL not reachable via DATABASE_URL";
+await requirePostgresIntegrationDatabase("Connection invariant tests");
 
 const PARTIAL_UNIQUE_INDEXES = [
   "gitlab_connections_one_active_per_user_instance",
@@ -64,7 +43,7 @@ function isUniqueViolation(error: unknown): boolean {
   return PARTIAL_UNIQUE_INDEXES.some((index) => message.includes(index));
 }
 
-describe("gitlab_connections partial unique invariants", { skip }, () => {
+describe("gitlab_connections partial unique invariants", () => {
   const prisma: PrismaClient = getPrisma();
 
   const suiteId = randomUUID().replace(/-/g, "");

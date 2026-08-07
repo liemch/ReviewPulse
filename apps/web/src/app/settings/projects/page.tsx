@@ -79,9 +79,9 @@ export default async function ProjectsSettingsPage({
                     <div className="rp-table-primary">
                       {project.pathWithNamespace ?? project.gitlabProjectId}
                     </div>
-                    {project.name ? (
-                      <div className="rp-table-sub">{project.name}</div>
-                    ) : null}
+                    <div className="rp-table-sub">
+                      GitLab project id: {project.gitlabProjectId}
+                    </div>
                     {project.error ? (
                       <div className="rp-field-error">{project.error}</div>
                     ) : null}

@@ -19,6 +19,60 @@ export type EnvCheckResult = {
 const STANDARD_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const KEY_VERSION_LABEL = /^v([1-9][0-9]*)$/;
 
+export const RUNTIME_ENV_DEFAULTS = {
+  COMMIT_LOOKBACK_OVERLAP_SECONDS: 900,
+  SYNC_POLL_INTERVAL_SECONDS: 60,
+  SYNC_JOB_BUDGET_SECONDS: 60,
+  SYNC_STALE_CLAIM_SECONDS: 300,
+} as const;
+
+export type SyncRuntimeConfig = {
+  commitLookbackOverlapSeconds: number;
+  syncPollIntervalSeconds: number;
+  syncJobBudgetSeconds: number;
+  syncStaleClaimSeconds: number;
+};
+
+const SYNC_RUNTIME_KEYS = Object.keys(
+  RUNTIME_ENV_DEFAULTS,
+) as (keyof typeof RUNTIME_ENV_DEFAULTS)[];
+
+function parsePositiveInteger(
+  env: Record<string, string | undefined>,
+  key: keyof typeof RUNTIME_ENV_DEFAULTS,
+): number {
+  const raw = env[key]?.trim() ?? "";
+  if (raw.length === 0) {
+    return RUNTIME_ENV_DEFAULTS[key];
+  }
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+  return parsed;
+}
+
+/** Parse the non-secret WP6 runtime knobs after (or during) preflight. */
+export function parseSyncRuntimeConfig(
+  env: Record<string, string | undefined> = process.env,
+): SyncRuntimeConfig {
+  return {
+    commitLookbackOverlapSeconds: parsePositiveInteger(
+      env,
+      "COMMIT_LOOKBACK_OVERLAP_SECONDS",
+    ),
+    syncPollIntervalSeconds: parsePositiveInteger(
+      env,
+      "SYNC_POLL_INTERVAL_SECONDS",
+    ),
+    syncJobBudgetSeconds: parsePositiveInteger(env, "SYNC_JOB_BUDGET_SECONDS"),
+    syncStaleClaimSeconds: parsePositiveInteger(
+      env,
+      "SYNC_STALE_CLAIM_SECONDS",
+    ),
+  };
+}
+
 function decodeCanonicalKey(value: string): Uint8Array | null {
   if (!STANDARD_BASE64.test(value)) {
     return null;
@@ -208,12 +262,29 @@ export function validateRuntimeEnv(
     }
   }
 
-  const membershipTtl = env.MEMBERSHIP_CACHE_TTL_SECONDS?.trim() ?? "";
-  if (membershipTtl.length > 0) {
-    const parsed = Number(membershipTtl);
+  for (const key of [
+    "MEMBERSHIP_CACHE_TTL_SECONDS",
+    "MEMBERSHIP_CACHE_NEGATIVE_TTL_SECONDS",
+  ] as const) {
+    const raw = env[key]?.trim() ?? "";
+    if (raw.length === 0) {
+      continue;
+    }
+    const parsed = Number(raw);
     if (!Number.isInteger(parsed) || parsed <= 0) {
+      issues.push({ key, message: "must be a positive integer when set" });
+    }
+  }
+
+  for (const key of SYNC_RUNTIME_KEYS) {
+    const value = env[key]?.trim() ?? "";
+    if (value.length === 0) {
+      continue;
+    }
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
       issues.push({
-        key: "MEMBERSHIP_CACHE_TTL_SECONDS",
+        key,
         message: "must be a positive integer when set",
       });
     }

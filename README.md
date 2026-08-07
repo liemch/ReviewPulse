@@ -80,13 +80,16 @@ rm -f /tmp/rp-admin-password.txt
 
 Then open `/login`, sign in, and use `/settings/*` (GitLab connection, projects, admin users/allowlist).
 
-## Worker stub
+## Sync worker
 
 ```bash
 npm run dev:worker
 ```
 
-Sync work starts in WP6; the stub only checks database connectivity after preflight.
+The WP6 worker loads the root `.env`, checks PostgreSQL readiness, coalesces
+enabled projects into PostgreSQL jobs, and incrementally syncs read-only GitLab
+commit/MR caches. Stop it with `SIGINT` or `SIGTERM`.
+Runtime/cursor locks are documented in `docs/PLAN-M1-WP6-Execution.md`.
 
 ## Quality gates
 
@@ -98,6 +101,10 @@ npm run build
 npm audit
 npm audit --omit=dev
 ```
+
+`npm run test` loads the monorepo root `.env` and requires the migrated local
+PostgreSQL database. Missing, invalid, or unreachable `DATABASE_URL` fails the
+integration suites instead of silently skipping them.
 
 ## Docs
 

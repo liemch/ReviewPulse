@@ -550,6 +550,10 @@ Forbidden: `score`, `grade`, `pass`, `fail`, `verdict`, `dat`, `khong_dat`, `pro
 
 ### WP6 — Sync worker
 - MR cursor; commit multi-branch lookback; coalesce; sync_blocked
+- **Status: IMPLEMENTED / READY_TO_COMMIT** — `feat/m1-wp6-sync-worker`
+  (PostgreSQL queue + scheduler, bounded retry/lease ownership, commit/MR
+  incremental cursors, credential failover, fail-closed integration runner).
+- Locks: `docs/PLAN-M1-WP6-Execution.md`
 
 ### WP7 — Dashboard + reference metrics
 - Filters; deep links; email policy UI (verified vs unverified aliases)

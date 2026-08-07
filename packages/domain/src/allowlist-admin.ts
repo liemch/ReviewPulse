@@ -57,16 +57,34 @@ export class AllowlistAdminService {
   }
 
   async removeInstance(instanceId: string): Promise<void> {
-    await this.prisma.membershipCache.deleteMany({
-      where: { gitlabInstanceId: instanceId },
-    });
-    await this.prisma.gitLabInstanceAllowlist.delete({
-      where: { id: instanceId },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.membershipCache.deleteMany({
+        where: { gitlabInstanceId: instanceId },
+      });
+      await tx.userProjectEnable.deleteMany({
+        where: { gitlabInstanceId: instanceId },
+      });
+      await tx.syncJob.updateMany({
+        where: {
+          jobType: "project_sync",
+          gitlabInstanceId: instanceId,
+          status: { in: ["pending", "running"] },
+        },
+        data: {
+          status: "sync_blocked",
+          claimedBy: null,
+          claimedAt: null,
+          lastError: "GitLab instance removed from allowlist",
+        },
+      });
+      await tx.gitLabInstanceAllowlist.delete({
+        where: { id: instanceId },
+      });
     });
   }
 
   async listProjects(instanceId?: string): Promise<ProjectAllowlistRow[]> {
-    return await this.prisma.reviewPulseProjectAllowlist.findMany({
+    const rows = await this.prisma.reviewPulseProjectAllowlist.findMany({
       ...(instanceId ? { where: { gitlabInstanceId: instanceId } } : {}),
       orderBy: { createdAt: "asc" },
       select: {
@@ -76,6 +94,15 @@ export class AllowlistAdminService {
         pathWithNamespace: true,
       },
     });
+    // Rows added before paths were normalized can hold "", which reads as a
+    // present-but-empty label at every render site.
+    return rows.map((row) => ({
+      ...row,
+      pathWithNamespace:
+        (row.pathWithNamespace?.trim().length ?? 0) > 0
+          ? row.pathWithNamespace
+          : null,
+    }));
   }
 
   async addProject(input: {
@@ -87,11 +114,15 @@ export class AllowlistAdminService {
     if (!/^\d+$/.test(gitlabProjectId)) {
       throw new Error("gitlab_project_id must be numeric");
     }
+    // An HTML form always submits the optional path field, so an omitted path
+    // arrives as "" and would otherwise be stored as a displayable value.
+    const pathWithNamespace = input.pathWithNamespace?.trim() ?? "";
     return await this.prisma.reviewPulseProjectAllowlist.create({
       data: {
         gitlabInstanceId: input.gitlabInstanceId,
         gitlabProjectId,
-        pathWithNamespace: input.pathWithNamespace ?? null,
+        pathWithNamespace:
+          pathWithNamespace.length > 0 ? pathWithNamespace : null,
       },
       select: {
         id: true,
@@ -107,16 +138,33 @@ export class AllowlistAdminService {
       where: { id: allowlistId },
       select: { gitlabInstanceId: true, gitlabProjectId: true },
     });
-    if (row) {
-      await this.prisma.membershipCache.deleteMany({
+    if (!row) {
+      return;
+    }
+
+    const project = {
+      gitlabInstanceId: row.gitlabInstanceId,
+      gitlabProjectId: row.gitlabProjectId,
+    };
+    await this.prisma.$transaction(async (tx) => {
+      await tx.membershipCache.deleteMany({ where: project });
+      await tx.userProjectEnable.deleteMany({ where: project });
+      await tx.syncJob.updateMany({
         where: {
-          gitlabInstanceId: row.gitlabInstanceId,
-          gitlabProjectId: row.gitlabProjectId,
+          jobType: "project_sync",
+          ...project,
+          status: { in: ["pending", "running"] },
+        },
+        data: {
+          status: "sync_blocked",
+          claimedBy: null,
+          claimedAt: null,
+          lastError: "Project removed from allowlist",
         },
       });
-    }
-    await this.prisma.reviewPulseProjectAllowlist.delete({
-      where: { id: allowlistId },
+      await tx.reviewPulseProjectAllowlist.delete({
+        where: { id: allowlistId },
+      });
     });
   }
 }

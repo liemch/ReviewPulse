@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   GitLabProjectForbiddenError,
   GitLabProjectNotFoundError,
+  GitLabRateLimitedError,
   GitLabUnauthorizedError,
   GitLabUpstreamUnavailableError,
   type GitLabProjectRef,
@@ -39,12 +40,16 @@ describe("probeAllowlistedProjectIds", () => {
       },
     };
 
-    const visible = await probeAllowlistedProjectIds(client, ["101", "102"]);
+    const { visible, failed } = await probeAllowlistedProjectIds(client, [
+      "101",
+      "102",
+    ]);
 
     assert.deepEqual(calls.sort(), ["101", "102"]);
     assert.equal(visible.size, 1);
     assert.equal(visible.get("101")?.pathWithNamespace, "group/visible");
     assert.equal(visible.has("102"), false);
+    assert.equal(failed.size, 0);
   });
 
   it("treats 403 as not visible without failing the batch", async () => {
@@ -57,9 +62,13 @@ describe("probeAllowlistedProjectIds", () => {
       },
     };
 
-    const visible = await probeAllowlistedProjectIds(client, ["201", "202"]);
+    const { visible, failed } = await probeAllowlistedProjectIds(client, [
+      "201",
+      "202",
+    ]);
 
     assert.equal(visible.has("201"), false);
+    assert.equal(failed.has("201"), false);
     assert.equal(visible.get("202")?.pathWithNamespace, "group/open");
   });
 
@@ -76,16 +85,50 @@ describe("probeAllowlistedProjectIds", () => {
     );
   });
 
-  it("fails closed on upstream/network errors", async () => {
+  it("reports upstream/network errors per project instead of denying them", async () => {
     const client = {
       async getProject() {
         throw new GitLabUpstreamUnavailableError({ status: 503 });
       },
     };
 
+    const { visible, failed } = await probeAllowlistedProjectIds(client, [
+      "401",
+    ]);
+
+    assert.equal(visible.size, 0);
+    assert.equal(failed.get("401"), "GITLAB_UPSTREAM_UNAVAILABLE");
+  });
+
+  it("keeps healthy projects when a sibling probe fails transiently", async () => {
+    const client = {
+      async getProject(projectId: number | string) {
+        if (projectId === "402") {
+          throw new GitLabRateLimitedError(null, { status: 429 });
+        }
+        return projectRef(403, "group/healthy");
+      },
+    };
+
+    const { visible, failed } = await probeAllowlistedProjectIds(client, [
+      "402",
+      "403",
+    ]);
+
+    assert.equal(failed.get("402"), "GITLAB_RATE_LIMITED");
+    assert.equal(visible.get("403")?.pathWithNamespace, "group/healthy");
+  });
+
+  it("rethrows non-GitLab errors instead of hiding them as probe failures", async () => {
+    const client = {
+      async getProject(): Promise<never> {
+        throw new TypeError("bug in the caller");
+      },
+    };
+
     await assert.rejects(
-      () => probeAllowlistedProjectIds(client, ["401"]),
-      GitLabUpstreamUnavailableError,
+      () => probeAllowlistedProjectIds(client, ["404"]),
+      TypeError,
     );
   });
 
@@ -112,7 +155,7 @@ describe("probeAllowlistedProjectIds", () => {
       },
     };
 
-    const visible = await probeAllowlistedProjectIds(client, []);
+    const { visible } = await probeAllowlistedProjectIds(client, []);
 
     assert.equal(callCount, 0);
     assert.equal(visible.size, 0);

@@ -20,6 +20,11 @@
       "types": "./src/env.ts",
       "import": "./src/env.ts",
       "default": "./src/env.ts"
+    },
+    "./integration-test-setup": {
+      "types": "./src/integration-test-setup.ts",
+      "import": "./src/integration-test-setup.ts",
+      "default": "./src/integration-test-setup.ts"
     }
   },
   "scripts": {

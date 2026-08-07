@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  parseSyncRuntimeConfig,
+  RUNTIME_ENV_DEFAULTS,
   summarizeEnvIssues,
   summarizeEnvWarnings,
   validateRuntimeEnv,
@@ -129,6 +131,49 @@ describe("validateRuntimeEnv", () => {
     );
   });
 
+  it("rejects a non-positive membership cache negative TTL when set", () => {
+    const result = validateRuntimeEnv({
+      ...good,
+      MEMBERSHIP_CACHE_NEGATIVE_TTL_SECONDS: "-5",
+    });
+    assert.equal(result.ok, false);
+    assert.ok(
+      summarizeEnvIssues(result).some((m) =>
+        m.includes("MEMBERSHIP_CACHE_NEGATIVE_TTL_SECONDS"),
+      ),
+    );
+  });
+
+  it("accepts positive WP6 runtime values", () => {
+    const result = validateRuntimeEnv({
+      ...good,
+      COMMIT_LOOKBACK_OVERLAP_SECONDS: "120",
+      SYNC_POLL_INTERVAL_SECONDS: "5",
+      SYNC_JOB_BUDGET_SECONDS: "30",
+      SYNC_STALE_CLAIM_SECONDS: "90",
+    });
+    assert.equal(result.ok, true);
+  });
+
+  it("reports every invalid WP6 runtime value", () => {
+    const result = validateRuntimeEnv({
+      ...good,
+      COMMIT_LOOKBACK_OVERLAP_SECONDS: "0",
+      SYNC_POLL_INTERVAL_SECONDS: "-1",
+      SYNC_JOB_BUDGET_SECONDS: "1.5",
+      SYNC_STALE_CLAIM_SECONDS: "not-a-number",
+    });
+    assert.deepEqual(
+      result.issues.map((issue) => issue.key).sort(),
+      [
+        "COMMIT_LOOKBACK_OVERLAP_SECONDS",
+        "SYNC_JOB_BUDGET_SECONDS",
+        "SYNC_POLL_INTERVAL_SECONDS",
+        "SYNC_STALE_CLAIM_SECONDS",
+      ],
+    );
+  });
+
   it("never embeds secret values in runtime issue messages", () => {
     const secret = "leak-me-please-abcdefghijklmnopqrstuvwxyz012345";
     const result = validateRuntimeEnv({
@@ -142,5 +187,50 @@ describe("validateRuntimeEnv", () => {
     ].join(" ");
     assert.equal(joined.includes(secret), false);
     assert.equal(joined.includes("too-short"), false);
+  });
+});
+
+describe("parseSyncRuntimeConfig", () => {
+  it("uses the documented WP6 defaults", () => {
+    assert.deepEqual(parseSyncRuntimeConfig({}), {
+      commitLookbackOverlapSeconds:
+        RUNTIME_ENV_DEFAULTS.COMMIT_LOOKBACK_OVERLAP_SECONDS,
+      syncPollIntervalSeconds:
+        RUNTIME_ENV_DEFAULTS.SYNC_POLL_INTERVAL_SECONDS,
+      syncJobBudgetSeconds: RUNTIME_ENV_DEFAULTS.SYNC_JOB_BUDGET_SECONDS,
+      syncStaleClaimSeconds:
+        RUNTIME_ENV_DEFAULTS.SYNC_STALE_CLAIM_SECONDS,
+    });
+  });
+
+  it("parses explicit WP6 values", () => {
+    assert.deepEqual(
+      parseSyncRuntimeConfig({
+        COMMIT_LOOKBACK_OVERLAP_SECONDS: "901",
+        SYNC_POLL_INTERVAL_SECONDS: "61",
+        SYNC_JOB_BUDGET_SECONDS: "62",
+        SYNC_STALE_CLAIM_SECONDS: "301",
+      }),
+      {
+        commitLookbackOverlapSeconds: 901,
+        syncPollIntervalSeconds: 61,
+        syncJobBudgetSeconds: 62,
+        syncStaleClaimSeconds: 301,
+      },
+    );
+  });
+
+  it("throws without reflecting an invalid value", () => {
+    const secretLikeValue = "invalid-secret-like-value";
+    assert.throws(
+      () =>
+        parseSyncRuntimeConfig({
+          SYNC_JOB_BUDGET_SECONDS: secretLikeValue,
+        }),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes("SYNC_JOB_BUDGET_SECONDS") &&
+        !error.message.includes(secretLikeValue),
+    );
   });
 });
