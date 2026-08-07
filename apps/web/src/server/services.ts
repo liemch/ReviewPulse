@@ -13,6 +13,8 @@ import { prisma } from "@reviewpulse/db";
 import {
   AllowlistAdminService,
   createDefaultCredentialProvider,
+  DashboardQueryService,
+  EmailAliasService,
   GitLabConnectionService,
   LiveProjectAccessService,
 } from "@reviewpulse/domain";
@@ -27,6 +29,8 @@ export type AppServices = {
   connections: GitLabConnectionService;
   projects: LiveProjectAccessService;
   allowlist: AllowlistAdminService;
+  dashboard: DashboardQueryService;
+  emails: EmailAliasService;
 };
 
 let cached: AppServices | null = null;
@@ -53,6 +57,8 @@ export function getServices(
   const connections = new GitLabConnectionService(prisma, credentials);
   const projects = new LiveProjectAccessService(prisma, credentials);
   const allowlist = new AllowlistAdminService(prisma);
+  const dashboard = new DashboardQueryService(prisma, projects);
+  const emails = new EmailAliasService(prisma);
 
   cached = {
     policy,
@@ -64,6 +70,8 @@ export function getServices(
     connections,
     projects,
     allowlist,
+    dashboard,
+    emails,
   };
   return cached;
 }

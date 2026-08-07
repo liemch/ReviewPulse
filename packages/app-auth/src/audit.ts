@@ -23,7 +23,9 @@ export type AuditAction =
   | "allowlist_instance_added"
   | "allowlist_instance_removed"
   | "allowlist_project_added"
-  | "allowlist_project_removed";
+  | "allowlist_project_removed"
+  | "email_alias_added"
+  | "email_alias_removed";
 
 const FORBIDDEN_META_KEYS = new Set([
   "password",

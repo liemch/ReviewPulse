@@ -84,6 +84,40 @@ export {
   type ProjectListItem,
   type VisibleProject,
 } from "./project-access.js";
+export {
+  KpiRulesStore,
+  type LoadedKpiRuleSet,
+} from "./kpi-rules.js";
+export {
+  AI_TAG_SUBJECT_REGEX,
+  assertNoForbiddenMetricFields,
+  calculateReferenceMetrics,
+  countAiAssistedCommits,
+  countCommitFrequency,
+  FORBIDDEN_METRIC_KEYS,
+  KPI_RULESET_ROLE,
+  KPI_RULESET_VERSION,
+  subjectHasAiTag,
+  toPublicMetric,
+  weekWindowAsiaHoChiMinh,
+  type KpiRuleView,
+  type MetricCommitInput,
+  type MetricDto,
+  type MetricStatus,
+  type ReferenceRange,
+} from "./metrics/index.js";
+export {
+  DashboardQueryService,
+  type DashboardCommitRow,
+  type DashboardEmailView,
+  type DashboardFilters,
+  type DashboardMrRow,
+  type DashboardResult,
+} from "./dashboard-query.js";
+export {
+  EmailAliasService,
+  type UserEmailView,
+} from "./email-alias.js";
 
 export function createDefaultSealer(
   env: Record<string, string | undefined> = process.env,
