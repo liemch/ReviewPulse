@@ -51,15 +51,12 @@ describe("SyncScheduler", () => {
   }
 
   async function enable(userId: string, gitlabProjectId: string): Promise<void> {
-    await prisma.reviewPulseProjectAllowlist.upsert({
-      where: {
-        gitlabInstanceId_gitlabProjectId: {
-          gitlabInstanceId: instanceId,
-          gitlabProjectId,
-        },
-      },
-      create: { gitlabInstanceId: instanceId, gitlabProjectId },
-      update: {},
+    // Two users may enable the same project concurrently, so the shared
+    // allowlist row has to be inserted in one statement. A Prisma upsert reads
+    // then writes, which loses the race on (instance, project) and throws P2002.
+    await prisma.reviewPulseProjectAllowlist.createMany({
+      data: [{ gitlabInstanceId: instanceId, gitlabProjectId }],
+      skipDuplicates: true,
     });
     await prisma.userProjectEnable.create({
       data: { userId, gitlabInstanceId: instanceId, gitlabProjectId },
