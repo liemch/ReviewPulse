@@ -16,6 +16,8 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  triggerVariant = "danger",
+  confirmVariant = "danger",
 }: {
   action: string;
   fields: Record<string, string>;
@@ -24,6 +26,8 @@ export function ConfirmDialog({
   title: string;
   description: string;
   confirmLabel: string;
+  triggerVariant?: "danger" | "primary" | "ghost";
+  confirmVariant?: "danger" | "primary" | "ghost";
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -32,7 +36,7 @@ export function ConfirmDialog({
   return (
     <>
       <Button
-        variant="danger"
+        variant={triggerVariant}
         size="sm"
         onClick={() => dialogRef.current?.showModal()}
       >
@@ -62,7 +66,7 @@ export function ConfirmDialog({
             >
               Hủy
             </Button>
-            <Button variant="danger" type="submit">
+            <Button variant={confirmVariant} type="submit">
               {confirmLabel}
             </Button>
           </div>

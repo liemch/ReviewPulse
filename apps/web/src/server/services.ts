@@ -17,6 +17,8 @@ import {
   EmailAliasService,
   GitLabConnectionService,
   LiveProjectAccessService,
+  MrMutationService,
+  MrWorkspaceService,
 } from "@reviewpulse/domain";
 
 export type AppServices = {
@@ -31,6 +33,8 @@ export type AppServices = {
   allowlist: AllowlistAdminService;
   dashboard: DashboardQueryService;
   emails: EmailAliasService;
+  mrWorkspace: MrWorkspaceService;
+  mrMutations: MrMutationService;
 };
 
 let cached: AppServices | null = null;
@@ -59,6 +63,13 @@ export function getServices(
   const allowlist = new AllowlistAdminService(prisma);
   const dashboard = new DashboardQueryService(prisma, projects);
   const emails = new EmailAliasService(prisma);
+  const mrWorkspace = new MrWorkspaceService(prisma, projects, credentials);
+  const mrMutations = new MrMutationService(
+    prisma,
+    projects,
+    credentials,
+    audit,
+  );
 
   cached = {
     policy,
@@ -72,6 +83,8 @@ export function getServices(
     allowlist,
     dashboard,
     emails,
+    mrWorkspace,
+    mrMutations,
   };
   return cached;
 }

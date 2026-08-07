@@ -56,6 +56,52 @@ export type GitLabMergeRequest = {
   readonly updatedAt: string;
   readonly webUrl: string | null;
   readonly sha: string | null;
+  readonly reviewers: readonly string[];
+};
+
+/** Live MR detail for the workspace (not the sync list row). */
+export type GitLabMergeRequestDetail = GitLabMergeRequest & {
+  readonly description: string | null;
+  readonly sourceBranch: string;
+  readonly targetBranch: string;
+  readonly draft: boolean;
+  readonly hasConflicts: boolean;
+  readonly mergeStatus: string | null;
+  readonly detailedMergeStatus: string | null;
+  readonly mergeable: boolean | null;
+  /** Acting user's merge permission as reported by GitLab on the MR payload. */
+  readonly userCanMerge: boolean | null;
+  readonly labels: readonly string[];
+  readonly createdAt: string | null;
+};
+
+export type GitLabMergeRequestDiff = {
+  readonly oldPath: string | null;
+  readonly newPath: string | null;
+  readonly aMode: string | null;
+  readonly bMode: string | null;
+  readonly newFile: boolean;
+  readonly renamedFile: boolean;
+  readonly deletedFile: boolean;
+  readonly diff: string;
+};
+
+export type GitLabMergeRequestApprovals = {
+  readonly approved: boolean;
+  readonly approvalsRequired: number | null;
+  readonly approvalsLeft: number | null;
+  readonly approvedBy: readonly string[];
+  readonly userHasApproved: boolean;
+  readonly userCanApprove: boolean;
+};
+
+export type GitLabPipelineSummary = {
+  readonly id: number;
+  readonly status: string;
+  readonly ref: string | null;
+  readonly sha: string | null;
+  readonly webUrl: string | null;
+  readonly updatedAt: string | null;
 };
 
 /**
@@ -73,6 +119,14 @@ export type ListCommitsQuery = {
 export type ListMergeRequestsQuery = {
   readonly updatedAfter: Date;
   readonly state?: GitLabMergeRequestState;
+  readonly page?: GitLabPageCursor;
+};
+
+/** M2 workspace listing filters (live, authz-scoped per project). */
+export type ListProjectMergeRequestsQuery = {
+  readonly state?: GitLabMergeRequestState;
+  readonly authorUsername?: string;
+  readonly reviewerUsername?: string;
   readonly page?: GitLabPageCursor;
 };
 

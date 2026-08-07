@@ -1,8 +1,9 @@
 /**
- * WP2 — GitLab read-only HTTP client with SSRF-hardened egress.
+ * WP2 — GitLab HTTP client with SSRF-hardened egress.
  *
- * M1 is read-only: nothing exported here can issue a POST/PUT/PATCH/DELETE,
- * and `readonly.test.ts` fails the build if that stops being true.
+ * Read surface (`createGitLabReadClient`) is GET-only. Write surface
+ * (`createGitLabWriteClient`) is M2-only and always uses the caller-supplied
+ * acting-user credential — never a shared/admin fallback.
  */
 
 export {
@@ -18,6 +19,14 @@ export {
   type GitLabReadClient,
   type GitLabReadClientDeps,
 } from "./client.js";
+export {
+  createGitLabWriteClient,
+  type ApproveMergeRequestInput,
+  type CreateMergeRequestNoteInput,
+  type GitLabWriteClient,
+  type GitLabWriteClientDeps,
+  type MergeMergeRequestInput,
+} from "./write-client.js";
 export {
   GITLAB_ERROR_CODES,
   GitLabAbortedError,
@@ -81,12 +90,17 @@ export type {
   GitLabCommit,
   GitLabInstanceContext,
   GitLabMergeRequest,
+  GitLabMergeRequestApprovals,
+  GitLabMergeRequestDetail,
+  GitLabMergeRequestDiff,
   GitLabMergeRequestState,
+  GitLabPipelineSummary,
   GitLabProjectRef,
   GitLabUser,
   ListCommitsQuery,
   ListMergeRequestsQuery,
   ListOptions,
+  ListProjectMergeRequestsQuery,
 } from "./types.js";
 export {
   buildApiUrl,

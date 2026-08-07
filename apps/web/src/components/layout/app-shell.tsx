@@ -17,6 +17,7 @@ import { requireUser } from "@/server/http";
 
 export type NavKey =
   | "dashboard"
+  | "merge-requests"
   | "security"
   | "gitlab"
   | "projects"
@@ -36,6 +37,12 @@ const MAIN_ITEMS: readonly NavItem[] = [
     href: "/dashboard",
     label: "Tổng quan",
     icon: <IconPulse size={17} />,
+  },
+  {
+    key: "merge-requests",
+    href: "/merge-requests",
+    label: "Review MR",
+    icon: <IconGitBranch size={17} />,
   },
   {
     key: "security",

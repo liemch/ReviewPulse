@@ -86,6 +86,7 @@ function mergeRequest(iid: number, updatedAt: string): GitLabMergeRequest {
     updatedAt,
     webUrl: `https://gitlab.example.test/mr/${iid}`,
     sha: `head-${iid}`,
+    reviewers: [],
   };
 }
 
