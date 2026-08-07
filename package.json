@@ -26,6 +26,7 @@
     "db:format": "npm run format -w @reviewpulse/db",
     "db:migrate:status": "npm run migrate:status -w @reviewpulse/db",
     "db:ready-smoke": "npm run ready-smoke -w @reviewpulse/db",
+    "db:seed:kpi": "npm run seed:kpi -w @reviewpulse/db",
     "auth:bootstrap-admin": "npm run bootstrap-admin -w @reviewpulse/web",
     "env:preflight": "npm run env:preflight -w @reviewpulse/db",
     "wp0:check": "npm run db:generate && npm run lint && npm run typecheck && npm run test"

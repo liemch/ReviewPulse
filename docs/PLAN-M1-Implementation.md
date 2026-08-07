@@ -547,12 +547,11 @@ Forbidden: `score`, `grade`, `pass`, `fail`, `verdict`, `dat`, `khong_dat`, `pro
 
 ### WP5 — Membership + ProjectAccess
 - TTL 300s; 401 vs 403 paths; fail closed
+- **Status: PASS** — merged via WP5 PR; negative TTL + visibility fixes on WP6/WP7 branches
 
 ### WP6 — Sync worker
 - MR cursor; commit multi-branch lookback; coalesce; sync_blocked
-- **Status: IMPLEMENTED / READY_TO_COMMIT** — `feat/m1-wp6-sync-worker`
-  (PostgreSQL queue + scheduler, bounded retry/lease ownership, commit/MR
-  incremental cursors, credential failover, fail-closed integration runner).
+- **Status: PASS** — `feat/m1-wp6-sync-worker` (PostgreSQL queue + scheduler, incremental cursors, credential failover)
 - Locks: `docs/PLAN-M1-WP6-Execution.md`
 
 ### WP7 — Dashboard + reference metrics
@@ -560,12 +559,17 @@ Forbidden: `score`, `grade`, `pass`, `fail`, `verdict`, `dat`, `khong_dat`, `pro
 - Disclaimer banner; MR terminology
 - Metric cards: commit_frequency, ai_assisted_commits; LOC/MR size as not_configured placeholders
 - Seed KpiRuleSet `dev-kpi-ref-2026.08.1`
+- **Status: IMPLEMENTED** — `feat/m1-wp7-dashboard-metrics`
+- Locks: `docs/PLAN-M1-WP7-WP8-Execution.md`
 
 ### WP7b — Metric calculators + tests
 - AI tag matcher; weekly frequency; snapshot immutability on rule_version change
+- **Status: IMPLEMENTED** — bundled with WP7
 
 ### WP8 — Hardening
 - Security tests matrix; runbooks for key rotation + PAT rotation
+- **Status: IMPLEMENTED** — dashboard IDOR/fail-closed tests + `docs/RUNBOOK-*.md`
+- Locks: `docs/PLAN-M1-WP7-WP8-Execution.md`
 
 ---
 

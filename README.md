@@ -43,7 +43,10 @@ npm run db:generate
 npm run db:migrate:deploy
 npm run db:migrate:status
 npm run db:ready-smoke
+npm run db:seed:kpi
 ```
+
+`db:seed:kpi` upserts the M1 reference ruleset `dev-kpi-ref-2026.08.1` (commit frequency + AI-tag metrics; LOC/MR size stay `not_configured`).
 
 Additive migrations only — never reset/drop for routine local work.
 
@@ -78,7 +81,8 @@ npm run auth:bootstrap-admin -- \
 rm -f /tmp/rp-admin-password.txt
 ```
 
-Then open `/login`, sign in, and use `/settings/*` (GitLab connection, projects, admin users/allowlist).
+Then open `/login`, sign in, and use `/dashboard` (activity + reference metrics)
+plus `/settings/*` (GitLab connection, projects, email aliases, admin users/allowlist).
 
 ## Sync worker
 
@@ -90,6 +94,14 @@ The WP6 worker loads the root `.env`, checks PostgreSQL readiness, coalesces
 enabled projects into PostgreSQL jobs, and incrementally syncs read-only GitLab
 commit/MR caches. Stop it with `SIGINT` or `SIGTERM`.
 Runtime/cursor locks are documented in `docs/PLAN-M1-WP6-Execution.md`.
+
+## Dashboard (WP7)
+
+After GitLab connect + project enable + worker sync:
+
+- `/dashboard` — commits / Merge Requests (deep links), email mismatch warnings, reference metric cards
+- No KPI score/grade/pass/fail — LOC and MR size show `not_configured` in M1
+- Runbooks: `docs/RUNBOOK-PAT-rotation.md`, `docs/RUNBOOK-encryption-key-rotation.md`
 
 ## Quality gates
 

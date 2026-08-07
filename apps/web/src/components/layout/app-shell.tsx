@@ -16,6 +16,7 @@ import { roleLabel } from "@/lib/labels";
 import { requireUser } from "@/server/http";
 
 export type NavKey =
+  | "dashboard"
   | "security"
   | "gitlab"
   | "projects"
@@ -30,6 +31,12 @@ type NavItem = {
 };
 
 const MAIN_ITEMS: readonly NavItem[] = [
+  {
+    key: "dashboard",
+    href: "/dashboard",
+    label: "Tổng quan",
+    icon: <IconPulse size={17} />,
+  },
   {
     key: "security",
     href: "/settings/security",
@@ -120,7 +127,7 @@ export async function AppShell({
   return (
     <div className="rp-shell">
       <aside className="rp-sidebar">
-        <Link href="/settings/security" className="rp-brand">
+        <Link href="/dashboard" className="rp-brand">
           <span className="rp-brand-mark" aria-hidden="true">
             <IconPulse size={19} />
           </span>

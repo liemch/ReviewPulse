@@ -71,7 +71,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             role: result.user.role,
           },
         })
-      : NextResponse.redirect(new URL("/settings/security", url.origin));
+      : NextResponse.redirect(new URL("/dashboard", url.origin));
 
     setSessionCookie(response, services.policy, result.sessionToken);
     setCsrfCookie(response, services.policy, issueCsrfToken());
