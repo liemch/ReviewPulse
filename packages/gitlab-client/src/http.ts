@@ -68,10 +68,26 @@ export const defaultSleep: SleepFn = (ms, signal) =>
     signal?.addEventListener("abort", onAbort, { once: true });
   });
 
+export type MutationHttpMethod = "POST" | "PUT" | "PATCH" | "DELETE";
+
 export interface GitLabRequestExecutor {
   requestJson(
     url: URL,
     options: { scope: RouteScope; signal?: AbortSignal },
+  ): Promise<RawResponse>;
+
+  /**
+   * Mutation requests. Retries only on 429 (request not accepted). Transport
+   * errors after send fail closed — never auto-retry POST/PUT (no double-submit).
+   */
+  requestMutationJson(
+    url: URL,
+    options: {
+      scope: RouteScope;
+      signal?: AbortSignal;
+      method: MutationHttpMethod;
+      body?: Record<string, unknown>;
+    },
   ): Promise<RawResponse>;
 }
 
@@ -87,6 +103,8 @@ export function createRequestExecutor(
     scope: RouteScope,
     callerSignal: AbortSignal | undefined,
     timeoutMs: number,
+    method?: MutationHttpMethod,
+    bodyJson?: Record<string, unknown>,
   ): Promise<RawResponse> {
     const decision = await ssrf.check(url);
     const credential = await auth.getCredential(callerSignal);
@@ -109,12 +127,19 @@ export function createRequestExecutor(
           [PRIVATE_TOKEN_HEADER]: credential.token,
           accept: "application/json",
           "user-agent": USER_AGENT,
+          ...(bodyJson === undefined
+            ? {}
+            : { "content-type": "application/json" }),
         },
         signal: controller.signal,
         pin: {
           address: decision.pinnedAddress,
           family: decision.pinnedFamily,
         },
+        ...(method === undefined ? {} : { method }),
+        ...(bodyJson === undefined
+          ? {}
+          : { body: JSON.stringify(bodyJson) }),
       });
       return await handleResponse(response, scope, limits);
     } catch (error) {
@@ -168,6 +193,50 @@ export function createRequestExecutor(
           const delayMs = backoffFor(error, attemptNo, limits, random);
           // Sleeping past the total budget only converts a useful error into a
           // timeout, so give up now and surface the real reason.
+          if (Date.now() + delayMs >= deadline) {
+            throw error;
+          }
+          await sleep(delayMs, signal);
+        }
+      }
+
+      throw lastError ?? new GitLabUpstreamUnavailableError({
+        reason: "retry_budget_exhausted",
+      });
+    },
+
+    async requestMutationJson(url, { scope, signal, method, body }) {
+      const deadline = Date.now() + limits.totalTimeoutMs;
+      let lastError: GitLabError | null = null;
+
+      for (let attemptNo = 1; attemptNo <= limits.maxAttempts; attemptNo += 1) {
+        throwIfAborted(signal);
+
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+          throw lastError ?? new GitLabTimeoutError({ reason: "total_budget" });
+        }
+
+        try {
+          return await attempt(
+            url,
+            scope,
+            signal,
+            Math.min(limits.attemptTimeoutMs, remaining),
+            method,
+            body,
+          );
+        } catch (error) {
+          // Mutations: only retry explicit 429 (GitLab rejected before accept).
+          // Transport/timeout after send is fail-closed — do not double-submit.
+          if (!(error instanceof GitLabRateLimitedError)) {
+            throw error;
+          }
+          lastError = error;
+          if (attemptNo >= limits.maxAttempts) {
+            throw error;
+          }
+          const delayMs = backoffFor(error, attemptNo, limits, random);
           if (Date.now() + delayMs >= deadline) {
             throw error;
           }

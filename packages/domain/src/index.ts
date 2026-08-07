@@ -118,6 +118,28 @@ export {
   EmailAliasService,
   type UserEmailView,
 } from "./email-alias.js";
+export {
+  evaluateMergeSafety,
+  isApprovalsSatisfied,
+  isPipelineStatusOk,
+  isStaleReview,
+  type MergeSafetyBlockReason,
+  type MergeSafetyInput,
+  type MergeSafetyResult,
+} from "./merge-safety.js";
+export {
+  MrWorkspaceService,
+  type MrAccessDenial,
+  type MrDetailView,
+  type MrListFilters,
+  type MrListItem,
+} from "./mr-workspace.js";
+export {
+  MrMutationService,
+  type MrMutationAuditWriter,
+  type MrMutationRef,
+  type MrMutationResult,
+} from "./mr-mutations.js";
 
 export function createDefaultSealer(
   env: Record<string, string | undefined> = process.env,

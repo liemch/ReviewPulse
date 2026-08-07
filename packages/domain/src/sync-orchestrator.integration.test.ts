@@ -165,6 +165,7 @@ describe("SyncOrchestrator persistence (PostgreSQL)", () => {
               updatedAt: "2026-08-07T03:30:00.000Z",
               webUrl: null,
               sha: `head_${suffix}`,
+              reviewers: [],
             },
           ],
           nextPage: null,

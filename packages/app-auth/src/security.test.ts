@@ -90,6 +90,10 @@ describe("audit writer secret rejection", () => {
       () => writer.write("login_success", "user-1", { session: "raw" }),
       /audit meta must not include secrets/,
     );
+    await assert.rejects(
+      () => writer.write("mr_comment", "user-1", { diff: "@@ -1 +1 @@" }),
+      /audit meta must not include secrets/,
+    );
   });
 });
 

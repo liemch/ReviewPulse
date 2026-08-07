@@ -11,6 +11,10 @@ import type {
   GitLabBranchRef,
   GitLabCommit,
   GitLabMergeRequest,
+  GitLabMergeRequestApprovals,
+  GitLabMergeRequestDetail,
+  GitLabMergeRequestDiff,
+  GitLabPipelineSummary,
   GitLabProjectRef,
   GitLabUser,
 } from "./types.js";
@@ -115,6 +119,46 @@ export function mapCommit(value: unknown): GitLabCommit {
   };
 }
 
+function mapUsernames(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && entry.length > 0) {
+      out.push(entry);
+      continue;
+    }
+    if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+      const username = optionalString(entry as Json, "username");
+      if (username !== null) {
+        out.push(username);
+      }
+    }
+  }
+  return out;
+}
+
+function mapLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && entry.length > 0) {
+      out.push(entry);
+      continue;
+    }
+    if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+      const name = optionalString(entry as Json, "name");
+      if (name !== null) {
+        out.push(name);
+      }
+    }
+  }
+  return out;
+}
+
 export function mapMergeRequest(value: unknown): GitLabMergeRequest {
   const source = asObject(value, "merge_request");
   const author = source["author"];
@@ -136,5 +180,105 @@ export function mapMergeRequest(value: unknown): GitLabMergeRequest {
     updatedAt: requireString(source, "updated_at", "merge_request"),
     webUrl: optionalString(source, "web_url"),
     sha: optionalString(source, "sha"),
+    reviewers: mapUsernames(source["reviewers"]),
+  };
+}
+
+export function mapMergeRequestDetail(value: unknown): GitLabMergeRequestDetail {
+  const base = mapMergeRequest(value);
+  const source = asObject(value, "merge_request_detail");
+  const draft =
+    optionalBool(source, "draft") === true ||
+    optionalBool(source, "work_in_progress") === true;
+  const mergeableRaw = source["mergeable"];
+  const mergeable =
+    typeof mergeableRaw === "boolean" ? mergeableRaw : null;
+
+  const userBlock = source["user"];
+  let userCanMerge: boolean | null = null;
+  if (
+    typeof userBlock === "object" &&
+    userBlock !== null &&
+    !Array.isArray(userBlock)
+  ) {
+    const canMerge = (userBlock as Json)["can_merge"];
+    if (typeof canMerge === "boolean") {
+      userCanMerge = canMerge;
+    }
+  }
+
+  return {
+    ...base,
+    description: optionalString(source, "description"),
+    sourceBranch: requireString(source, "source_branch", "merge_request_detail"),
+    targetBranch: requireString(source, "target_branch", "merge_request_detail"),
+    draft,
+    hasConflicts: optionalBool(source, "has_conflicts") === true,
+    mergeStatus: optionalString(source, "merge_status"),
+    detailedMergeStatus: optionalString(source, "detailed_merge_status"),
+    mergeable,
+    userCanMerge,
+    labels: mapLabels(source["labels"]),
+    createdAt: optionalString(source, "created_at"),
+  };
+}
+
+export function mapMergeRequestDiff(value: unknown): GitLabMergeRequestDiff {
+  const source = asObject(value, "merge_request_diff");
+  return {
+    oldPath: optionalString(source, "old_path"),
+    newPath: optionalString(source, "new_path"),
+    aMode: optionalString(source, "a_mode"),
+    bMode: optionalString(source, "b_mode"),
+    newFile: optionalBool(source, "new_file") === true,
+    renamedFile: optionalBool(source, "renamed_file") === true,
+    deletedFile: optionalBool(source, "deleted_file") === true,
+    // Diff text is returned to the caller for display only; never persist/log.
+    diff: typeof source["diff"] === "string" ? source["diff"] : "",
+  };
+}
+
+export function mapMergeRequestApprovals(
+  value: unknown,
+): GitLabMergeRequestApprovals {
+  const source = asObject(value, "merge_request_approvals");
+  const approvedByRaw = source["approved_by"];
+  const approvedBy: string[] = [];
+  if (Array.isArray(approvedByRaw)) {
+    for (const entry of approvedByRaw) {
+      if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+        const user = (entry as Json)["user"];
+        if (typeof user === "object" && user !== null && !Array.isArray(user)) {
+          const username = optionalString(user as Json, "username");
+          if (username !== null) {
+            approvedBy.push(username);
+          }
+        }
+      }
+    }
+  }
+
+  const required = source["approvals_required"];
+  const left = source["approvals_left"];
+
+  return {
+    approved: optionalBool(source, "approved") === true,
+    approvalsRequired: typeof required === "number" ? required : null,
+    approvalsLeft: typeof left === "number" ? left : null,
+    approvedBy,
+    userHasApproved: optionalBool(source, "user_has_approved") === true,
+    userCanApprove: optionalBool(source, "user_can_approve") === true,
+  };
+}
+
+export function mapPipelineSummary(value: unknown): GitLabPipelineSummary {
+  const source = asObject(value, "pipeline");
+  return {
+    id: requireInt(source, "id", "pipeline"),
+    status: requireString(source, "status", "pipeline"),
+    ref: optionalString(source, "ref"),
+    sha: optionalString(source, "sha"),
+    webUrl: optionalString(source, "web_url"),
+    updatedAt: optionalString(source, "updated_at"),
   };
 }

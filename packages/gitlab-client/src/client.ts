@@ -1,10 +1,9 @@
 /**
- * `GitLabReadClient` — the only surface callers use.
+ * `GitLabReadClient` — the only surface callers use for reads.
  *
  * Read-only is a property of the type, not a convention: every method here
  * goes through `executor.requestJson`, which has no method parameter and whose
- * transport hardcodes GET. There is no code path in this package that can
- * issue a write, so "M1 never mutates GitLab" holds without trusting callers.
+ * transport defaults to GET. Write mutations live in `write-client.ts`.
  */
 
 import type { GitLabAuthAdapter } from "./auth.js";
@@ -22,6 +21,10 @@ import {
   mapBranch,
   mapCommit,
   mapMergeRequest,
+  mapMergeRequestApprovals,
+  mapMergeRequestDetail,
+  mapMergeRequestDiff,
+  mapPipelineSummary,
   mapProject,
   mapUser,
 } from "./mappers.js";
@@ -40,11 +43,16 @@ import type {
   GitLabCommit,
   GitLabInstanceContext,
   GitLabMergeRequest,
+  GitLabMergeRequestApprovals,
+  GitLabMergeRequestDetail,
+  GitLabMergeRequestDiff,
+  GitLabPipelineSummary,
   GitLabProjectRef,
   GitLabUser,
   ListCommitsQuery,
   ListMergeRequestsQuery,
   ListOptions,
+  ListProjectMergeRequestsQuery,
 } from "./types.js";
 import {
   buildApiUrl,
@@ -80,6 +88,37 @@ export interface GitLabReadClient {
     query: ListMergeRequestsQuery,
     options?: { signal?: AbortSignal },
   ): Promise<Page<GitLabMergeRequest>>;
+
+  /** M2 workspace listing — live filters, no sync watermark required. */
+  listProjectMergeRequests(
+    projectId: number | string,
+    query?: ListProjectMergeRequestsQuery,
+    options?: { signal?: AbortSignal },
+  ): Promise<Page<GitLabMergeRequest>>;
+
+  getMergeRequest(
+    projectId: number | string,
+    iid: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<GitLabMergeRequestDetail>;
+
+  listMergeRequestDiffs(
+    projectId: number | string,
+    iid: number,
+    options?: ListOptions,
+  ): Promise<Page<GitLabMergeRequestDiff>>;
+
+  getMergeRequestApprovals(
+    projectId: number | string,
+    iid: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<GitLabMergeRequestApprovals>;
+
+  listMergeRequestPipelines(
+    projectId: number | string,
+    iid: number,
+    options?: ListOptions,
+  ): Promise<Page<GitLabPipelineSummary>>;
 
   readonly limits: ClientLimits;
 }
@@ -256,6 +295,99 @@ export function createGitLabReadClient(
         options?.signal,
       );
       return toPage(response, cursor, mapMergeRequest, "merge_requests");
+    },
+
+    async listProjectMergeRequests(
+      projectId,
+      query = {},
+      options,
+    ): Promise<Page<GitLabMergeRequest>> {
+      const cursor: GitLabPageCursor = {
+        page: query.page?.page ?? 1,
+        perPage: query.page?.perPage ?? limits.perPage,
+      };
+      const response = await get(
+        `/api/v4/projects/${encodeProjectId(projectId)}/merge_requests`,
+        {
+          ...(query.state === undefined ? {} : { state: query.state }),
+          ...(query.authorUsername === undefined
+            ? {}
+            : { author_username: query.authorUsername }),
+          ...(query.reviewerUsername === undefined
+            ? {}
+            : { reviewer_username: query.reviewerUsername }),
+          order_by: "updated_at",
+          sort: "desc",
+          ...pageQuery(query.page),
+        },
+        "project",
+        options?.signal,
+      );
+      return toPage(response, cursor, mapMergeRequest, "merge_requests");
+    },
+
+    async getMergeRequest(
+      projectId,
+      iid,
+      options,
+    ): Promise<GitLabMergeRequestDetail> {
+      const response = await get(
+        `/api/v4/projects/${encodeProjectId(projectId)}/merge_requests/${iid}`,
+        {},
+        "project",
+        options?.signal,
+      );
+      return mapMergeRequestDetail(response.json);
+    },
+
+    async listMergeRequestDiffs(
+      projectId,
+      iid,
+      options,
+    ): Promise<Page<GitLabMergeRequestDiff>> {
+      const cursor: GitLabPageCursor = {
+        page: options?.page?.page ?? 1,
+        perPage: options?.page?.perPage ?? limits.perPage,
+      };
+      const response = await get(
+        `/api/v4/projects/${encodeProjectId(projectId)}/merge_requests/${iid}/diffs`,
+        pageQuery(options?.page),
+        "project",
+        options?.signal,
+      );
+      return toPage(response, cursor, mapMergeRequestDiff, "merge_request_diffs");
+    },
+
+    async getMergeRequestApprovals(
+      projectId,
+      iid,
+      options,
+    ): Promise<GitLabMergeRequestApprovals> {
+      const response = await get(
+        `/api/v4/projects/${encodeProjectId(projectId)}/merge_requests/${iid}/approvals`,
+        {},
+        "project",
+        options?.signal,
+      );
+      return mapMergeRequestApprovals(response.json);
+    },
+
+    async listMergeRequestPipelines(
+      projectId,
+      iid,
+      options,
+    ): Promise<Page<GitLabPipelineSummary>> {
+      const cursor: GitLabPageCursor = {
+        page: options?.page?.page ?? 1,
+        perPage: options?.page?.perPage ?? limits.perPage,
+      };
+      const response = await get(
+        `/api/v4/projects/${encodeProjectId(projectId)}/merge_requests/${iid}/pipelines`,
+        pageQuery(options?.page),
+        "project",
+        options?.signal,
+      );
+      return toPage(response, cursor, mapPipelineSummary, "pipelines");
     },
   };
 }

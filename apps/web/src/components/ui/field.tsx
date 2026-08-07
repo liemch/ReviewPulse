@@ -2,6 +2,7 @@ import type {
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
+  TextareaHTMLAttributes,
 } from "react";
 
 export function Field({
@@ -77,6 +78,27 @@ export function Select({
     <select {...props} id={id} className="rp-select">
       {children}
     </select>
+  );
+}
+
+export function TextArea({
+  id,
+  help,
+  invalid = false,
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  id: string;
+  help?: boolean;
+  invalid?: boolean;
+}) {
+  return (
+    <textarea
+      {...props}
+      id={id}
+      className="rp-input rp-textarea"
+      aria-invalid={invalid ? true : undefined}
+      aria-describedby={help ? `${id}-help` : undefined}
+    />
   );
 }
 

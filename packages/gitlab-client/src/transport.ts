@@ -1,18 +1,16 @@
 /**
- * GET-only HTTP transport.
+ * HTTP transport with optional method/body.
  *
- * `fetch`/undici cannot be told "connect to this exact IP but present this
- * hostname for TLS" without a custom dispatcher, and the whole point of A1 is
- * that the socket goes to the address we validated. So the default transport
- * is a thin wrapper over the Node built-ins with a pinned `lookup` and an
- * explicit `servername`. No new runtime dependency, and TLS verification is
- * left at its secure default — there is no production option to disable it,
- * supply a custom CA, replace the lookup, or inject a raw request driver.
+ * Read path always omits method (defaults to GET) and never sends a body.
+ * Write path (write-client) may set POST/PUT and a JSON body. TLS pinning and
+ * SSRF validation are unchanged: the socket still dials the validated address.
  */
 
 import http from "node:http";
 import https from "node:https";
 import type { LookupFunction } from "node:net";
+
+export type GitLabHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type GitLabHttpRequest = {
   readonly url: string;
@@ -20,6 +18,10 @@ export type GitLabHttpRequest = {
   readonly signal: AbortSignal;
   /** Validated address from the SSRF guard; the socket must go here. */
   readonly pin: { readonly address: string; readonly family: 4 | 6 } | null;
+  /** Defaults to GET when omitted (read path). */
+  readonly method?: GitLabHttpMethod;
+  /** Optional request body (write path only). */
+  readonly body?: string | null;
 };
 
 export type GitLabHttpResponse = {
@@ -81,7 +83,7 @@ export function buildPinnedRequestOptions(
 ): https.RequestOptions {
   const isTls = url.protocol === "https:";
   return {
-    method: "GET",
+    method: request.method ?? "GET",
     headers: { ...request.headers },
     signal: request.signal,
     ...(request.pin === null
@@ -103,6 +105,7 @@ export function createPinnedNodeTransport(): GitLabHttpTransport {
       const url = new URL(request.url);
       const options = buildPinnedRequestOptions(request, url);
       const driver = url.protocol === "https:" ? https : http;
+      const body = request.body ?? null;
 
       return await new Promise<GitLabHttpResponse>((resolve, reject) => {
         const clientRequest = driver.request(url, options, (response) => {
@@ -114,6 +117,9 @@ export function createPinnedNodeTransport(): GitLabHttpTransport {
         });
 
         clientRequest.on("error", reject);
+        if (body !== null && body.length > 0) {
+          clientRequest.write(body);
+        }
         clientRequest.end();
       });
     },

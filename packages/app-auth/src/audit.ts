@@ -25,7 +25,10 @@ export type AuditAction =
   | "allowlist_project_added"
   | "allowlist_project_removed"
   | "email_alias_added"
-  | "email_alias_removed";
+  | "email_alias_removed"
+  | "mr_comment"
+  | "mr_approve"
+  | "mr_merge";
 
 const FORBIDDEN_META_KEYS = new Set([
   "password",
@@ -39,6 +42,9 @@ const FORBIDDEN_META_KEYS = new Set([
   "private-token",
   "privatetoken",
   "accesstoken",
+  "diff",
+  "fulldiff",
+  "requestbody",
 ]);
 
 export class AuditWriter {
